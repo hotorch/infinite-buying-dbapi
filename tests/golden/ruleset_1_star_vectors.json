@@ -1,0 +1,6 @@
+[
+  {"symbol":"TQQQ","division":20,"t":"5","expected_star_pct":"0.075"},
+  {"symbol":"TQQQ","division":40,"t":"10","expected_star_pct":"0.075"},
+  {"symbol":"SOXL","division":20,"t":"5","expected_star_pct":"0.10"},
+  {"symbol":"SOXL","division":40,"t":"10","expected_star_pct":"0.10"}
+]
