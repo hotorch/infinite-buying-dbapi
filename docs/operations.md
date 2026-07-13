@@ -10,10 +10,44 @@ uv run app capability verify
 ```
 
 Capital is USD. Do not enter a KRW amount. Credentials are prompted and stored
-through Windows Credential Manager; never place them in `.env`.
+through Windows Credential Manager. The verified OAuth setting is
+`IB_DBSEC_OAUTH_STYLE=form`.
+
+If a DB Securities credential JSON was temporarily copied into `.env`, migrate
+it once and then remove the `DB_APPKEY` and `DB_APPSECRET` lines:
+
+```powershell
+uv run app setup --account-alias student-001 --import-env-credentials
+```
+
+`DB_ENV=real` describes the broker credential bundle; it is separate from the
+application's `IB_ENVIRONMENT=preview|paper|live` execution mode.
 Set `IB_DBSEC_REQUESTS_PER_SECOND` only after recording the lowest official
 limit among every TR used by this installation. Live mode rejects a missing
 value.
+
+The read-only balance endpoint may return business code `2679` when there are
+no overseas-stock rows. The adapter normalizes that code to an empty holdings
+or transaction-history list. Any other non-success business code stops reconciliation and must not be
+silently converted to an empty account.
+
+## Read-only DB Securities checks
+
+```powershell
+uv run app dbsec auth-status
+uv run app dbsec balance
+uv run app dbsec holdings
+uv run app dbsec transaction-history --start 2026-07-01 --end 2026-07-13
+uv run app dbsec current-price --symbol TQQQ
+uv run app dbsec daily-chart --symbol TQQQ --start 2026-07-01 --end 2026-07-13
+```
+
+These commands have no raw-JSON mode and never call the order path. Reconcile
+an existing profile with `uv run app reconcile p1 --environment live`; a
+quantity mismatch persists `RECONCILIATION_REQUIRED` and blocks execution.
+When no verified rate is configured, read-only commands use a conservative
+one-request-per-second local limit. Live reconciliation and orders still
+require the verified `IB_DBSEC_REQUESTS_PER_SECOND` setting.
 
 ## Daily preview
 

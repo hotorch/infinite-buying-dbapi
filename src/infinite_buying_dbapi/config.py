@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 from platformdirs import user_data_path
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .models import Environment
@@ -22,4 +22,8 @@ class Settings(BaseSettings):
     max_daily_notional_usd: Decimal = Decimal("2000")
     request_timeout_seconds: float = 10.0
     dbsec_requests_per_second: float | None = None
-    dbsec_oauth_style: Literal["json", "form"] = "json"
+    dbsec_oauth_style: Literal["json", "form"] = "form"
+    db_appkey: SecretStr | None = Field(default=None, validation_alias="DB_APPKEY")
+    db_appsecret: SecretStr | None = Field(default=None, validation_alias="DB_APPSECRET")
+    db_credential_env: str | None = Field(default=None, validation_alias="DB_ENV")
+    db_expire_date: str | None = Field(default=None, validation_alias="DB_EXPIRE_DATE")

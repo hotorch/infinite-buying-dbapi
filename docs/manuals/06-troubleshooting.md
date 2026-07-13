@@ -36,11 +36,21 @@ uv run app emergency-stop on
 
 1. APP_KEY/APP_SECRET 만료 여부
 2. 실계좌와 모의계좌 키 혼동 여부
-3. `IB_DBSEC_OAUTH_STYLE=json` 또는 `form` 선택
+3. `.env`의 `IB_DBSEC_OAUTH_STYLE=form` 확인
 4. 마지막 발급 시도 후 60초 경과 여부
 5. DB증권 공지·고객센터 확인
 
-두 OAuth 형식을 1분 안에 연속 시험하지 마세요.
+현재 실증된 기본값은 `form`입니다. 공식 홈페이지의 JSON 예시를 재현해야 하는 특별한 경우에만 `json`을 명시적으로 선택합니다. 두 OAuth 형식을 1분 안에 연속 시험하지 마세요.
+
+HTTP 403이 나오면 먼저 `.env`에 예전 값인 `IB_DBSEC_OAUTH_STYLE=json`이 남아 있지 않은지 확인합니다. APP KEY·SECRET을 로그나 지원 채팅에 붙여 넣지 마세요.
+
+HTTP 401·403·429 또는 5xx 오류가 나도 프로그램은 다른 OAuth 형식을 자동 재시도하지 않습니다. 오류에 표시된 `retry after` 시각 이후 원인을 확인하고 다시 실행하세요.
+
+## 잔고 조회의 `2679 조회내역이 없습니다`
+
+인증 실패가 아니라 요청한 해외주식 잔고 행이 없다는 DB증권 업무 응답입니다. 프로그램은 이를 빈 잔고로 처리합니다. DB증권 앱에 실제 해외주식이 있는데도 이 응답이 나오면 계좌·실계좌/모의계좌 키가 맞는지 확인하고 신규 주문을 중단하세요.
+
+`uv run app dbsec holdings`가 빈 목록이고 로컬 프로필 수량도 0이면 정상 빈 상태입니다. 로컬 수량이 0이 아니면 `uv run app reconcile PROFILE --environment live`가 `RECONCILIATION_REQUIRED`를 기록하며 신규 주문을 차단합니다.
 
 ## 주문 결과가 불명확함
 

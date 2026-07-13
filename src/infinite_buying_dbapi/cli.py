@@ -10,8 +10,8 @@ from pathlib import Path
 
 import typer
 
-from .auth import DbSecTokenManager
-from .broker import DbSecBroker, PaperBroker, PreviewBroker
+from .auth import DbSecTokenManager, OAuthError
+from .broker import BrokerError, DbSecBroker, PaperBroker, PreviewBroker
 from .config import Settings
 from .execution import ExecutionLimits, execute_intents
 from .market_calendar import NEW_YORK, session_schedule
@@ -19,7 +19,7 @@ from .models import Environment, Phase, StrategyProfile, canonical_json
 from .rate_limit import DbSecRateLimiter
 from .reconciliation import reconcile_dbsec
 from .replay import replay_file
-from .security import redact, store_secret
+from .security import get_secret, redact, store_secret
 from .service import plan_phase
 from .store import StateStore
 
@@ -32,6 +32,7 @@ live_app = typer.Typer(no_args_is_help=True)
 emergency_app = typer.Typer(no_args_is_help=True)
 backup_app = typer.Typer(no_args_is_help=True)
 scheduler_app = typer.Typer(no_args_is_help=True)
+dbsec_app = typer.Typer(no_args_is_help=True, help="Read-only DB Securities account and market inquiries")
 app.add_typer(profile_app, name="profile")
 app.add_typer(capability_app, name="capability")
 app.add_typer(run_app, name="run")
@@ -40,6 +41,7 @@ app.add_typer(live_app, name="live")
 app.add_typer(emergency_app, name="emergency-stop")
 app.add_typer(backup_app, name="backup")
 app.add_typer(scheduler_app, name="scheduler")
+app.add_typer(dbsec_app, name="dbsec")
 
 
 def _context() -> tuple[Settings, StateStore]:
@@ -61,22 +63,164 @@ def _live_broker(settings: Settings, store: StateStore, account_alias: str) -> D
     return DbSecBroker(settings.dbsec_base_url, token, settings.request_timeout_seconds, before_request=limiter.wait)
 
 
+def _account_alias(settings: Settings, store: StateStore) -> str:
+    return store.setting("account_alias", settings.account_alias) or settings.account_alias
+
+
+def _read_only_broker() -> tuple[DbSecBroker, StateStore, str]:
+    settings, store = _context()
+    alias = _account_alias(settings, store)
+    try:
+        token = DbSecTokenManager(
+            settings.dbsec_base_url,
+            alias,
+            store,
+            settings.request_timeout_seconds,
+            oauth_style=settings.dbsec_oauth_style,
+        ).access_token()
+        requests_per_second = settings.dbsec_requests_per_second or 1.0
+        limiter = DbSecRateLimiter(store, alias, requests_per_second)
+        broker = DbSecBroker(settings.dbsec_base_url, token, settings.request_timeout_seconds, before_request=limiter.wait)
+        return broker, store, alias
+    except (OAuthError, BrokerError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+def _symbol(row: dict[str, object]) -> str:
+    return str(row.get("SymCode") or row.get("AstkIsuNo") or "-").split(".")[0].upper()
+
+
+def _quantity(row: dict[str, object]) -> str:
+    return str(row.get("AstkExecBaseQty") or row.get("AstkBalQty") or row.get("BalQty") or "0")
+
+
+@dbsec_app.command("auth-status")
+def dbsec_auth_status() -> None:
+    """Show credential metadata without issuing a token or revealing secrets."""
+    settings, store = _context()
+    alias = _account_alias(settings, store)
+    expiry_raw = store.setting("dbsec_credential_expire_date")
+    expiry = date.fromisoformat(expiry_raw) if expiry_raw else None
+    token_expiry_raw = get_secret(alias, "access_token_expires_at")
+    try:
+        token_valid = bool(token_expiry_raw and datetime.fromisoformat(token_expiry_raw) > datetime.now(timezone.utc) + timedelta(minutes=5))
+    except ValueError:
+        token_valid = False
+    typer.echo(
+        canonical_json(
+            {
+                "credentials_present": bool(get_secret(alias, "app_key") and get_secret(alias, "app_secret")),
+                "credential_environment": store.setting("dbsec_credential_env", "unknown"),
+                "credential_expired": expiry < date.today() if expiry else None,
+                "cached_token_valid": token_valid,
+            }
+        )
+    )
+
+
+@dbsec_app.command("holdings")
+def dbsec_holdings() -> None:
+    """List overseas symbols and quantities; never emits the raw response."""
+    broker, _, _ = _read_only_broker()
+    try:
+        rows = broker.holdings()
+    except BrokerError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    for row in rows:
+        typer.echo(f"{_symbol(row)}\t{_quantity(row)}")
+    typer.echo(f"holdings={len(rows)}")
+
+
+@dbsec_app.command("balance")
+def dbsec_balance() -> None:
+    """Show the minimal safe overseas balance view."""
+    broker, _, _ = _read_only_broker()
+    try:
+        rows = broker.holdings()
+    except BrokerError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    for row in rows:
+        currency = str(row.get("CrcyCode") or row.get("FcurrCode") or "USD")
+        typer.echo(f"{currency}\t{_symbol(row)}\t{_quantity(row)}")
+    typer.echo(f"balance_rows={len(rows)}")
+
+
+@dbsec_app.command("transaction-history")
+def dbsec_transaction_history(start: str = typer.Option(...), end: str = typer.Option(...)) -> None:
+    broker, _, _ = _read_only_broker()
+    start_date, end_date = _date_value(start, "start"), _date_value(end, "end")
+    if start_date > end_date:
+        raise typer.BadParameter("start must be on or before end")
+    try:
+        rows = broker.transaction_history(start_date, end_date)
+    except BrokerError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    for row in rows:
+        typer.echo(f"{row.get('OrdDt', '-')}\t{_symbol(row)}\t{row.get('AstkBnsTpCode', '-')}\t{row.get('AstkExecQty', '0')}")
+    typer.echo(f"transactions={len(rows)}")
+
+
+@dbsec_app.command("current-price")
+def dbsec_current_price(symbol: str = typer.Option(...)) -> None:
+    broker, _, _ = _read_only_broker()
+    try:
+        price = broker.current_price(symbol.upper())
+    except BrokerError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"{symbol.upper()}\t{price}")
+
+
+@dbsec_app.command("daily-chart")
+def dbsec_daily_chart(symbol: str = typer.Option(...), start: str = typer.Option(...), end: str = typer.Option(...)) -> None:
+    broker, _, _ = _read_only_broker()
+    start_date, end_date = _date_value(start, "start"), _date_value(end, "end")
+    if start_date > end_date:
+        raise typer.BadParameter("start must be on or before end")
+    try:
+        rows = broker.daily_candles(symbol.upper(), start_date, end_date)
+    except BrokerError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    for row in rows:
+        typer.echo(f"{row['date']}\t{row['open']}\t{row['high']}\t{row['low']}\t{row['close']}\t{row['volume']}")
+    typer.echo(f"candles={len(rows)}")
+
+
 @app.command()
 def setup(
     account_alias: str = typer.Option("default"),
     save_access_token: bool = typer.Option(False, help="Prompt for and save a temporary access token in Windows Credential Manager."),
     save_api_credentials: bool = typer.Option(False, help="Prompt for the app key and secret required for automatic OAuth renewal."),
+    import_env_credentials: bool = typer.Option(False, help="Import DB_APPKEY/DB_APPSECRET from .env into Windows Credential Manager."),
 ) -> None:
     """Initialize the local database and optionally save a token securely."""
     settings, store = _context()
     store.set_setting("account_alias", account_alias)
     store.set_setting("emergency_stop", "true")
+    if save_api_credentials and import_env_credentials:
+        raise typer.BadParameter("choose either --save-api-credentials or --import-env-credentials")
     if save_access_token:
         token = getpass("DB Securities access token: ")
         store_secret(account_alias, "access_token", token)
     if save_api_credentials:
         store_secret(account_alias, "app_key", getpass("DB Securities app key: "))
         store_secret(account_alias, "app_secret", getpass("DB Securities app secret: "))
+    if import_env_credentials:
+        if settings.db_appkey is None or settings.db_appsecret is None:
+            raise typer.BadParameter("DB_APPKEY and DB_APPSECRET must both be set in .env")
+        credential_env = (settings.db_credential_env or "").strip().lower()
+        if credential_env != "real":
+            raise typer.BadParameter("DB_ENV must be real for the v1 production endpoint")
+        try:
+            expiry = datetime.strptime(settings.db_expire_date or "", "%Y%m%d").date()
+        except ValueError as exc:
+            raise typer.BadParameter("DB_EXPIRE_DATE must use YYYYMMDD") from exc
+        if expiry < date.today():
+            raise typer.BadParameter("DB Securities app credentials have expired")
+        store_secret(account_alias, "app_key", settings.db_appkey.get_secret_value())
+        store_secret(account_alias, "app_secret", settings.db_appsecret.get_secret_value())
+        store.set_setting("dbsec_credential_env", credential_env)
+        store.set_setting("dbsec_credential_expire_date", expiry.isoformat())
+        typer.echo("Imported DB Securities credentials into Windows Credential Manager. Remove DB_APPKEY and DB_APPSECRET from .env.")
     typer.echo(f"Initialized {settings.db_path}. Emergency stop is ON.")
 
 

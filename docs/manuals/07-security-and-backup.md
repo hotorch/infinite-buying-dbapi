@@ -2,18 +2,20 @@
 
 ## 비밀정보 저장 위치
 
-APP_KEY, APP_SECRET, Access Token과 만료시각은 Windows 자격 증명 관리자에 저장합니다. `.env`에는 비밀이 아닌 실행 설정만 둡니다.
+APP_KEY, APP_SECRET, Access Token과 만료시각은 Windows 자격 증명 관리자에 저장합니다. `.env`에는 비밀이 아닌 실행 설정만 둡니다. 발급 JSON을 옮기기 위해 `DB_APPKEY`, `DB_APPSECRET`을 임시로 넣었다면 `--import-env-credentials` 성공 직후 두 줄을 삭제합니다.
 
 `.env`에 둘 수 있는 예:
 
 ```text
 IB_ACCOUNT_ALIAS=student-001
 IB_ENVIRONMENT=preview
-IB_DBSEC_OAUTH_STYLE=json
+IB_DBSEC_OAUTH_STYLE=form
 IB_DBSEC_REQUESTS_PER_SECOND=공식확인값
 IB_MAX_ORDER_NOTIONAL_USD=1000
 IB_MAX_DAILY_NOTIONAL_USD=2000
 ```
+
+`DB_ENV=real`은 DB증권 자격증명 환경이고 `IB_ENVIRONMENT=preview|paper|live`는 프로그램 실행 모드입니다. 이름이 비슷해도 서로 대체할 수 없습니다.
 
 ## 수강생별 분리
 

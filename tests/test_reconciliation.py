@@ -57,3 +57,16 @@ def test_reconciliation_flags_unknown_broker_order(tmp_path) -> None:
     broker = FakeDbSec([{"OrdNo": 999, "AstkExecQty": "0", "AstkOrdRmqty": "1"}], 0)
     result = reconcile_dbsec(store, broker, profile, date.today())
     assert result.reconciliation_required
+
+
+def test_reconciliation_fails_closed_when_empty_broker_differs_from_local(tmp_path) -> None:
+    store = StateStore(tmp_path / "state.sqlite3")
+    profile = StrategyProfile("p1", "TQQQ", 40, Decimal("10000"))
+    store.create_profile(profile)
+    state = store.get_state("p1")
+    store.save_state(state.evolved(quantity=2, cost_basis=Decimal("200")), state.version)
+
+    result = reconcile_dbsec(store, FakeDbSec([], 0), profile, date.today())
+
+    assert result.reconciliation_required
+    assert store.get_state("p1").reconciliation_required

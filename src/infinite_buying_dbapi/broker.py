@@ -149,11 +149,11 @@ class DbSecBroker:
                 "WonFcurrTpCode": "2",
             }
         }
-        return self._all_pages(self.TRANSACTION_PATH, body, "Out")
+        return self._all_pages(self.TRANSACTION_PATH, body, "Out", empty_codes={"2679"})
 
     def holdings(self) -> list[dict[str, Any]]:
         body = {"In": {"WonFcurrTpCode": "2", "TrxTpCode": "2", "CmsnTpCode": "2", "DpntBalTpCode": "1"}}
-        return self._all_pages(self.BALANCE_PATH, body, "Out2")
+        return self._all_pages(self.BALANCE_PATH, body, "Out2", empty_codes={"2679"})
 
     def holding(self, symbol: str) -> dict[str, Any] | None:
         wanted = symbol.upper()
@@ -162,20 +162,32 @@ class DbSecBroker:
                 return row
         return None
 
-    def _all_pages(self, path: str, body: dict[str, Any], array_key: str) -> list[dict[str, Any]]:
+    def _all_pages(
+        self,
+        path: str,
+        body: dict[str, Any],
+        array_key: str,
+        *,
+        empty_codes: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         continuation_key = ""
         seen_keys: set[str] = set()
         while True:
             response, next_key = self.raw_inquiry(path, body, continuation_key=continuation_key)
-            if response.get("rsp_cd") != "00000":
+            response_code = str(response.get("rsp_cd", ""))
+            if response_code in (empty_codes or set()):
+                return rows
+            if response_code != "00000":
                 raise BrokerError(f"DB Securities inquiry rejected: {response.get('rsp_cd')} {response.get('rsp_msg', '')}")
             page = response.get(array_key)
             if page is None:
                 page = []
             if not isinstance(page, list):
                 raise BrokerError(f"DB Securities {array_key} is not an array")
-            rows.extend(item for item in page if isinstance(item, dict))
+            if any(not isinstance(item, dict) for item in page):
+                raise BrokerError(f"DB Securities {array_key} contains a non-object row")
+            rows.extend(page)
             if not next_key:
                 return rows
             if next_key in seen_keys:
@@ -220,7 +232,15 @@ class DbSecBroker:
             response.raise_for_status()
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             raise BrokerError(f"DB Securities inquiry failed: {exc.__class__.__name__}") from exc
-        return response.json(), response.headers.get("cont_key", "")
+        except httpx.HTTPStatusError as exc:
+            raise BrokerError(f"DB Securities inquiry failed with HTTP {exc.response.status_code}") from exc
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise BrokerError("DB Securities inquiry returned invalid JSON") from exc
+        if not isinstance(payload, dict):
+            raise BrokerError("DB Securities inquiry response is not an object")
+        return payload, response.headers.get("cont_key", "")
 
     def orderable_amount(self, symbol: str, side: Side, price: Decimal, currency_code: str = "2") -> tuple[Decimal, int]:
         if currency_code not in {"1", "2"}:

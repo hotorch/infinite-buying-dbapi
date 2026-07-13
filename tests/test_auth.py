@@ -54,6 +54,7 @@ def test_oauth_json_style_matches_public_howto_page(tmp_path, monkeypatch) -> No
         "a",
         StateStore(tmp_path / "state.sqlite3"),
         client=httpx.Client(base_url="https://example.test", transport=httpx.MockTransport(response)),
+        oauth_style="json",
     )
     assert manager.issue() == "token-json"
 
@@ -74,3 +75,25 @@ def test_oauth_rate_limit_and_missing_credentials(tmp_path, monkeypatch) -> None
     other = DbSecTokenManager("https://example.test", "b", store, client=client)
     with pytest.raises(OAuthError, match="not configured"):
         other.issue()
+
+
+@pytest.mark.parametrize("status", [401, 403, 429, 500, 503])
+def test_oauth_http_failures_are_sanitized_and_not_retried(tmp_path, monkeypatch, status) -> None:
+    secrets = {"a:app_key": "key", "a:app_secret": "secret"}
+    monkeypatch.setattr(auth_module, "get_secret", lambda alias, name: secrets.get(f"{alias}:{name}"))
+    calls = []
+
+    def response(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(status, json={"appsecret": "must-not-leak"})
+
+    manager = DbSecTokenManager(
+        "https://example.test",
+        "a",
+        StateStore(tmp_path / "state.sqlite3"),
+        client=httpx.Client(base_url="https://example.test", transport=httpx.MockTransport(response)),
+    )
+    with pytest.raises(OAuthError, match=rf"HTTP {status}.*retry after") as error:
+        manager.issue()
+    assert len(calls) == 1
+    assert "must-not-leak" not in str(error.value)

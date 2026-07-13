@@ -88,6 +88,22 @@ uv run app --help
 
 ## 5. DB증권 키를 안전하게 등록하기
 
+DB증권에서 내려받은 다음 형식은 `.env` 예제가 아니라 **발급 자격증명 JSON**입니다.
+
+```json
+{
+  "appkey": "발급받은 값",
+  "appsecret": "발급받은 값",
+  "env": "real",
+  "expire_date": "YYYYMMDD"
+}
+```
+
+- `appkey`, `appsecret`: Access Token 발급에 사용하는 장기 자격증명
+- `env=real`: 실계좌용 발급 묶음이라는 메타데이터
+- `expire_date`: APP KEY·SECRET 만료일이며 24시간짜리 Access Token 만료일이 아님
+- 네 필드 모두를 OAuth 요청에 보내는 것은 아닙니다.
+
 다음 명령을 실행합니다.
 
 ```powershell
@@ -107,6 +123,14 @@ DB Securities app secret:
 - 수강생마다 다른 별칭, 다른 Windows 사용자, 다른 데이터베이스를 사용하세요.
 - 프로그램은 APP_KEY와 APP_SECRET을 Windows 자격 증명 관리자에 저장합니다.
 
+이미 `.env`에 `DB_APPKEY`, `DB_APPSECRET`, `DB_ENV`, `DB_EXPIRE_DATE`를 넣었다면 한 번만 가져올 수 있습니다.
+
+```powershell
+uv run app setup --account-alias student-001 --import-env-credentials
+```
+
+성공 후 `.env`에서 `DB_APPKEY`, `DB_APPSECRET` 줄을 삭제하세요. 이 네 이름은 DB증권 발급 JSON을 안전 저장소로 옮길 때 쓰는 입력이며, `IB_ENVIRONMENT=preview|paper|live` 같은 프로그램 운용 설정과는 다른 개념입니다.
+
 ### OAuth 요청 형식에 관한 중요 안내
 
 2026-07-12 확인 기준으로 DB증권 홈페이지 이용절차와 다운로드형 OAuth 명세의 요청 형식이 서로 다릅니다.
@@ -116,15 +140,29 @@ DB Securities app secret:
 | 홈페이지 이용절차 | `application/json` | `appsecret` | 없음 |
 | 다운로드 OAuth 명세 | `application/x-www-form-urlencoded` | `appsecretkey` | `scope=oob` |
 
-프로그램 기본값은 홈페이지 안내에 맞춘 `json`입니다. DB증권 고객센터 또는 최신 계정 안내에서 다운로드 명세 방식을 사용하라고 확인받은 경우에만 `.env`에서 다음처럼 바꾸세요.
+공식 다운로드 명세, 공식 테스트베드 샘플, 2026-07-12 실계좌 키 인증 결과가 모두 다음 `form` 방식을 확인하므로 프로그램 기본값도 이에 맞췄습니다.
 
 ```text
 IB_DBSEC_OAUTH_STYLE=form
 ```
 
-프로그램은 토큰 발급 제한 때문에 두 형식을 자동으로 연속 재시도하지 않습니다. 자세한 내용은 [DB증권 API 신청·인증 매뉴얼](docs/manuals/02-dbsec-api-setup.md)을 읽으세요.
+홈페이지 이용절차의 JSON 예시는 참고용 호환 방식으로만 남겨 둡니다. 프로그램은 토큰 발급 제한 때문에 두 형식을 자동으로 연속 재시도하지 않습니다. 자세한 내용은 [DB증권 API 신청·인증 매뉴얼](docs/manuals/02-dbsec-api-setup.md)을 읽으세요.
 
 ## 6. 첫 전략 프로필 만들기
+
+키 등록 후 다음 읽기 전용 명령으로 인증과 계좌·시세를 확인할 수 있습니다. 원본 JSON, 키, 토큰, 전체 계좌번호는 출력하지 않습니다.
+
+```powershell
+uv run app dbsec auth-status
+uv run app dbsec balance
+uv run app dbsec holdings
+uv run app dbsec transaction-history --start 2026-07-01 --end 2026-07-13
+uv run app dbsec current-price --symbol TQQQ
+uv run app dbsec daily-chart --symbol TQQQ --start 2026-07-01 --end 2026-07-13
+```
+
+실제 로컬 프로필을 대조할 때만 `uv run app reconcile p1 --environment live`를 사용합니다. 수량이 다르면 `RECONCILIATION_REQUIRED`로 전환되어 신규 주문이 차단됩니다.
+공식 TR 제한값을 아직 설정하지 않은 읽기 전용 명령은 보수적으로 초당 1회만 호출합니다. live 대조와 주문에는 확인된 `IB_DBSEC_REQUESTS_PER_SECOND`가 계속 필요합니다.
 
 처음에는 TQQQ 40분할을 권장합니다.
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -24,7 +24,7 @@ class DbSecTokenManager:
         store: StateStore,
         timeout_seconds: float = 10.0,
         client: httpx.Client | None = None,
-        oauth_style: str = "json",
+        oauth_style: str = "form",
     ):
         if oauth_style not in {"json", "form"}:
             raise ValueError("oauth_style must be json or form")
@@ -46,9 +46,13 @@ class DbSecTokenManager:
         return self.issue()
 
     def issue(self) -> str:
+        self._check_credential_expiry()
         app_key, app_secret = self._credentials()
-        if not self.store.claim_oauth_request(self.account_alias, datetime.now(timezone.utc), 60):
-            raise OAuthError("DB Securities token issuance is limited to one request per minute")
+        now = datetime.now(timezone.utc)
+        if not self.store.claim_oauth_request(self.account_alias, now, 60):
+            previous = self.store.setting(f"oauth_last_request_at:{self.account_alias}")
+            retry_at = datetime.fromisoformat(previous) + timedelta(seconds=60) if previous else now + timedelta(seconds=60)
+            raise OAuthError(f"DB Securities token issuance is limited to one request per minute; retry after {retry_at.isoformat()}")
         if self.oauth_style == "json":
             response = self.client.post(
                 self.TOKEN_PATH,
@@ -64,8 +68,13 @@ class DbSecTokenManager:
         try:
             response.raise_for_status()
             payload: dict[str, Any] = response.json()
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            retry_at = now + timedelta(seconds=60)
+            raise OAuthError(f"DB Securities token issuance failed with HTTP {status}; retry after {retry_at.isoformat()}") from exc
         except (httpx.HTTPError, ValueError) as exc:
-            raise OAuthError("DB Securities token issuance failed") from exc
+            retry_at = now + timedelta(seconds=60)
+            raise OAuthError(f"DB Securities token issuance failed; retry after {retry_at.isoformat()}") from exc
         token = payload.get("access_token") or payload.get("token")
         expires_in = payload.get("expires_in") or payload.get("expire_in")
         if not token or not expires_in:
@@ -101,3 +110,8 @@ class DbSecTokenManager:
         if not app_key or not app_secret:
             raise OAuthError("DB Securities app key and app secret are not configured")
         return app_key, app_secret
+
+    def _check_credential_expiry(self) -> None:
+        raw = self.store.setting("dbsec_credential_expire_date")
+        if raw and date.fromisoformat(raw) < datetime.now(timezone.utc).date():
+            raise OAuthError("DB Securities app credentials have expired; renew APP KEY and APP SECRET before retrying")

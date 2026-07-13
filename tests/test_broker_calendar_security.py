@@ -131,6 +131,50 @@ def test_current_price_and_paginated_holdings() -> None:
     assert broker.holding("TQQQ")["AstkExecBaseQty"] == "3"
 
 
+def test_holdings_treats_official_no_records_code_as_empty() -> None:
+    client = httpx.Client(
+        base_url="https://example.test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"rsp_cd": "2679", "rsp_msg": "조회내역이 없습니다"})),
+    )
+    assert DbSecBroker("https://example.test", "token", client=client).holdings() == []
+
+
+def test_transaction_history_treats_no_records_code_as_empty() -> None:
+    client = httpx.Client(
+        base_url="https://example.test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"rsp_cd": "2679", "rsp_msg": "조회내역이 없습니다"})),
+    )
+    broker = DbSecBroker("https://example.test", "token", client=client)
+    assert broker.transaction_history(date(2026, 1, 1), date(2026, 1, 2)) == []
+
+
+def test_holdings_rejects_repeated_continuation_key_and_non_object_rows() -> None:
+    repeated = httpx.Client(
+        base_url="https://example.test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, headers={"cont_key": "SAME"}, json={"rsp_cd": "00000", "Out2": []})),
+    )
+    with pytest.raises(BrokerError, match="repeated a continuation key"):
+        DbSecBroker("https://example.test", "token", client=repeated).holdings()
+
+    malformed = httpx.Client(
+        base_url="https://example.test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"rsp_cd": "00000", "Out2": ["bad"]})),
+    )
+    with pytest.raises(BrokerError, match="non-object row"):
+        DbSecBroker("https://example.test", "token", client=malformed).holdings()
+
+
+@pytest.mark.parametrize("status", [401, 403, 429, 500])
+def test_read_only_http_errors_are_sanitized(status) -> None:
+    client = httpx.Client(
+        base_url="https://example.test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(status, json={"authorization": "Bearer secret"})),
+    )
+    with pytest.raises(BrokerError, match=rf"HTTP {status}") as error:
+        DbSecBroker("https://example.test", "token", client=client).holdings()
+    assert "secret" not in str(error.value)
+
+
 def test_transaction_history_builds_official_query() -> None:
     throttles = []
 
