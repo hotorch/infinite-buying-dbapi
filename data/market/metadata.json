@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "generated_on": "2026-07-14",
+  "source": {
+    "name": "Toss Securities Open API",
+    "endpoint": "/api/v1/candles",
+    "request": {
+      "interval": "1d",
+      "adjusted": true,
+      "count": 10000
+    }
+  },
+  "columns": [
+    "date",
+    "symbol",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume"
+  ],
+  "files": {
+    "qqq_adjusted_daily.csv": {
+      "symbol": "QQQ",
+      "rows": 6877,
+      "first_date": "1999-03-10",
+      "last_date": "2026-07-13",
+      "sha256": "fa66423b696c9f77602309cd9e7a92b56ad17d96bd532ecaa6b9c352d1b3f509"
+    },
+    "soxl_adjusted_daily.csv": {
+      "symbol": "SOXL",
+      "rows": 4109,
+      "first_date": "2010-03-11",
+      "last_date": "2026-07-13",
+      "sha256": "b0f2e663926d4414331cff59f6ed1992c4fd55897d2a120c9c210d50ded55d51"
+    },
+    "tqqq_adjusted_daily.csv": {
+      "symbol": "TQQQ",
+      "rows": 4128,
+      "first_date": "2010-02-11",
+      "last_date": "2026-07-13",
+      "sha256": "fa58c43dee5b00a69a037be24d443e15f192aa30046067e1bba3518133e9fd7b"
+    }
+  },
+  "notes": [
+    "OHLCV values are stored exactly as returned by the API with adjusted=true.",
+    "The API response does not include a separate adjustment-factor column.",
+    "Redistribution terms should be reviewed before publishing this snapshot in a public repository."
+  ],
+  "incremental_updates": {
+    "source": "DB Securities Open API",
+    "endpoint": "/api/v1/quote/overseas-stock/chart/day",
+    "adjusted_price_request": "InputOrgAdjPrc=1",
+    "latest_completed_session": "2026-07-13"
+  }
+}

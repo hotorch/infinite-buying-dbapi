@@ -8,6 +8,12 @@ dist/
 build/
 *.egg-info/
 .env
-data/
+data/*
+!data/market/
+!data/market/**
 backups/
 diagnostics/
+dashboard/node_modules/
+dashboard/.next/
+dashboard/tsconfig.tsbuildinfo
+dashboard/*.log

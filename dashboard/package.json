@@ -1,0 +1,27 @@
+{
+  "name": "infinite-buying-backtest-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname localhost",
+    "build": "next build",
+    "start": "next start --hostname localhost",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "npm run build && node tests/e2e/dashboard.e2e.mjs"
+  },
+  "dependencies": {
+    "lightweight-charts": "5.2.0",
+    "next": "16.2.10",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.9.0"
+  },
+  "overrides": {
+    "postcss": "8.5.10"
+  }
+}
