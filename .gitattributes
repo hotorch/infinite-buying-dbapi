@@ -1,0 +1,2 @@
+data/market/*.csv text eol=lf
+data/market/*.json text eol=lf
