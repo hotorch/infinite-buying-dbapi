@@ -61,6 +61,24 @@ def test_dbsec_cli_output_is_minimal_and_never_calls_order_path(tmp_path, monkey
     assert "token-value" not in result.output
 
 
+def test_dbsec_cli_uses_symbol_market_code(tmp_path, monkeypatch) -> None:
+    calls = []
+
+    class ReadOnlyBroker:
+        def current_price(self, symbol, market_code="FN"):
+            calls.append((symbol, market_code))
+            return "10.25"
+
+    store = StateStore(tmp_path / "state.sqlite3")
+    monkeypatch.setattr("infinite_buying_dbapi.cli._read_only_broker", lambda: (ReadOnlyBroker(), store, "default"))
+
+    result = CliRunner().invoke(app, ["dbsec", "current-price", "--symbol", "SOXL"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == [("SOXL", "FA")]
+    assert "SOXL\t10.25" in result.output
+
+
 def test_dbsec_auth_status_does_not_issue_token_or_print_secrets(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("IB_DB_PATH", str(tmp_path / "state.sqlite3"))
     values = {"app_key": "key-value", "app_secret": "secret-value", "access_token_expires_at": "2099-12-31T00:00:00+00:00"}

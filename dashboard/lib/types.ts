@@ -68,8 +68,9 @@ export type WeatherState = Regime | "early_thaw";
 export type RegimeWeatherRow = {
   date: string;
   signal_date: string;
-  symbol: "TQQQ";
-  signal_symbol: "QQQ";
+  symbol: "TQQQ" | "SOXL";
+  signal_symbol: "QQQ" | "SMH";
+  benchmark_symbol?: "SPY";
   regime: Regime;
   weather_state: WeatherState;
   regime_age: number;
@@ -114,7 +115,7 @@ export type MarketDataCollection = {
   updated: boolean;
   added: number;
   symbols: Array<{
-    symbol: "TQQQ" | "SOXL" | "QQQ";
+    symbol: "TQQQ" | "SOXL" | "QQQ" | "SMH" | "SPY";
     previous_last_date: string;
     last_date: string;
     added: number;

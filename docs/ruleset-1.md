@@ -38,5 +38,5 @@ integers. Strategy capital is denominated in US dollars in v1.
 - Return to normal on the next session when previous close is above 85% of
   TQQQ average cost or 80% of SOXL average cost.
 
-Division 30 uses the generalized formula but is preview/paper/replay only.
+Division 30 uses the generalized formula but is backtest/preview only and can never be enabled for real orders.
 Ruleset changes require a new identifier and new golden vectors.

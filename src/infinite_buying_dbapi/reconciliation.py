@@ -6,20 +6,24 @@ from typing import Any
 
 from .broker import DbSecBroker
 from .models import FillEvent, IntentRole, Side, StrategyProfile, StrategyState
+from .positions import apply_fills_with_cycles
 from .store import StateStore
-from .strategy import apply_fills_in_order
 
 
 def reconcile_dbsec(store: StateStore, broker: DbSecBroker, profile: StrategyProfile, session_date: date) -> StrategyState:
     state = store.get_state(profile.profile_id)
-    records = broker.transaction_history(session_date, session_date, profile.symbol)
+    unresolved = store.unresolved_orders(profile.profile_id)
+    start_date = min((date.fromisoformat(row["order_date"]) for row in unresolved), default=session_date)
+    records = broker.transaction_history(start_date, session_date, profile.symbol)
     unresolved_broker_order = False
     for row in records:
         order_no = str(row.get("OrdNo", ""))
         if not order_no:
             continue
         try:
-            local_order = store.get_order(order_no)
+            raw_order_date = str(row.get("OrdDt") or "")
+            order_date = datetime.strptime(raw_order_date, "%Y%m%d").date() if len(raw_order_date) == 8 else None
+            local_order = store.get_order(order_no, profile.account_alias, order_date)
         except KeyError:
             state = _flag_mismatch(store, state, f"unknown broker order {order_no}")
             unresolved_broker_order = True
@@ -28,8 +32,23 @@ def reconcile_dbsec(store: StateStore, broker: DbSecBroker, profile: StrategyPro
         executed = _int_qty(row.get("AstkExecQty"))
         remaining = _int_qty(row.get("AstkOrdRmqty"))
         rejected = str(row.get("AstkRjtCode", "")).strip() not in {"", "0", "00000"}
-        status = "REJECTED" if rejected else "FILLED" if executed and not remaining else "PARTIAL" if executed else "OPEN" if remaining else "UNKNOWN"
-        store.update_order_status(order_no, status, executed, remaining)
+        cancelled = str(row.get("OrdCnclYn") or row.get("AstkCnclYn") or "").upper() in {"Y", "1", "TRUE"}
+        status = (
+            "REJECTED"
+            if rejected
+            else "CANCELLED_PARTIAL"
+            if cancelled and executed
+            else "CANCELLED"
+            if cancelled
+            else "FILLED"
+            if executed and not remaining
+            else "PARTIAL"
+            if executed
+            else "OPEN"
+            if remaining
+            else "UNKNOWN"
+        )
+        store.update_order_status(order_no, status, executed, remaining, profile.account_alias, order_date)
         exec_no = str(row.get("ExecNo", "0"))
         if executed <= 0 or exec_no in {"", "0"}:
             continue
@@ -42,6 +61,8 @@ def reconcile_dbsec(store: StateStore, broker: DbSecBroker, profile: StrategyPro
             requested_qty=intent.quantity,
             filled_qty=min(executed, intent.quantity),
             fill_price=Decimal(str(row.get("AstkExecPrc") or "0")),
+            fee=Decimal(str(row.get("CmsnAmt") or row.get("AstkCmsn") or "0")),
+            settlement_status=str(row.get("StlmYn") or row.get("SettlementStatus") or "unknown"),
             filled_at=_parse_datetime(row),
         )
         store.add_fill(fill)
@@ -49,7 +70,7 @@ def reconcile_dbsec(store: StateStore, broker: DbSecBroker, profile: StrategyPro
     pending = store.pending_fills(profile.profile_id)
     if pending:
         pairs = [(store.get_intent(fill.intent_id), fill) for fill in pending]
-        updated = apply_fills_in_order(profile, state, pairs)
+        updated = apply_fills_with_cycles(store, profile, state, pairs)
         store.save_reconciled_state(updated, state.version, pending)
         state = updated
 
@@ -57,7 +78,7 @@ def reconcile_dbsec(store: StateStore, broker: DbSecBroker, profile: StrategyPro
     broker_quantity = _int_qty(holding.get("AstkExecBaseQty")) if holding else 0
     if broker_quantity != state.quantity:
         return _flag_mismatch(store, state, f"quantity local={state.quantity} broker={broker_quantity}")
-    if unresolved_broker_order:
+    if unresolved_broker_order or store.has_unknown_intents(profile.profile_id):
         return state
     if state.reconciliation_required:
         cleared = state.evolved(reconciliation_required=False)
@@ -73,6 +94,7 @@ def _flag_mismatch(store: StateStore, state: StrategyState, reason: str) -> Stra
         store.save_state(flagged, state.version)
         state = flagged
     store.audit("DBSEC_RECONCILIATION", {"profile_id": state.profile_id, "status": "MISMATCH", "reason": reason})
+    store.set_profile_status(state.profile_id, "LOCKED")
     return state
 
 

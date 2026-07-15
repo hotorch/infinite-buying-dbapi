@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
 
@@ -15,28 +15,23 @@ class PreflightError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class ExecutionLimits:
-    max_order_notional: Decimal
-    max_daily_notional: Decimal
+    max_order_notional: Decimal | None = None
+    max_daily_notional: Decimal | None = None
 
 
 def assert_live_gates(store: StateStore, profile: StrategyProfile, state: StrategyState, session_date: date) -> None:
     failures: list[str] = []
     if not profile.live_eligible:
         failures.append("PROFILE_NOT_LIVE_ELIGIBLE")
-    if store.setting("live_enabled", "false") != "true":
-        failures.append("LIVE_NOT_ENABLED")
-    if not store.is_live_approved(profile.account_alias, session_date):
-        failures.append("DAILY_APPROVAL_MISSING")
     if store.capability("supports_opposing_loc") != "확인됨":
         failures.append("OPPOSING_LOC_NOT_VERIFIED")
     if store.capability("oauth_client_credentials") != "확인됨":
         failures.append("OAUTH_NOT_VERIFIED")
     if store.capability("rate_limits") != "확인됨":
         failures.append("RATE_LIMITS_NOT_VERIFIED")
-    if store.setting("legal_review_ack", "false") != "true":
-        failures.append("LEGAL_REVIEW_NOT_ACKNOWLEDGED")
-    if store.setting("risk_disclosure_ack", "false") != "true":
-        failures.append("RISK_DISCLOSURE_NOT_ACKNOWLEDGED")
+    for name in ("live_order_test_loc", "live_order_test_moc", "live_cancel_test", "live_partial_fill_test", "live_timeout_reconciliation_test"):
+        if store.capability(name) != "확인됨":
+            failures.append(f"{name.upper()}_NOT_VERIFIED")
     if store.setting("emergency_stop", "true") == "true":
         failures.append("EMERGENCY_STOP_ACTIVE")
     if state.reconciliation_required:
@@ -53,10 +48,10 @@ def preflight_intents(intents: list[OrderIntent], state: StrategyState, limits: 
     for intent in intents:
         reference_price = intent.limit_price if intent.limit_price is not None else state.avg_cost
         notional = reference_price * intent.quantity
-        if notional > limits.max_order_notional:
+        if limits.max_order_notional is not None and notional > limits.max_order_notional:
             raise PreflightError("ORDER_NOTIONAL_LIMIT_EXCEEDED")
         total += notional
-    if total > limits.max_daily_notional:
+    if limits.max_daily_notional is not None and total > limits.max_daily_notional:
         raise PreflightError("DAILY_NOTIONAL_LIMIT_EXCEEDED")
 
 
@@ -92,6 +87,7 @@ def execute_intents(
             store.mark_intent_unknown(intent.intent_id)
             store.audit("ORDER_AMBIGUOUS", {"intent_id": intent.intent_id})
             raise
+        order = replace(order, account_alias=profile.account_alias, order_date=intent.session_date)
         store.record_broker_order(order)
         submitted.append(order.broker_order_no)
     return submitted

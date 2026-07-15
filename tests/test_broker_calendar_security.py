@@ -213,6 +213,16 @@ def test_invalid_broker_responses_fail_closed() -> None:
         broker.holdings()
 
 
+def test_non_numeric_price_fails_closed_without_decimal_traceback() -> None:
+    client = httpx.Client(
+        base_url="https://example.test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"Out": {"Prpr": "-"}, "rsp_cd": "00000"})),
+    )
+    broker = DbSecBroker("https://example.test", "token", client=client)
+    with pytest.raises(BrokerError, match="missing Prpr"):
+        broker.current_price("SOXL", market_code="FA")
+
+
 def test_early_close_schedule_uses_exchange_calendar() -> None:
     schedule = session_schedule(date(2025, 11, 28))
     assert schedule.regular_open.hour == 9 and schedule.regular_open.minute == 30

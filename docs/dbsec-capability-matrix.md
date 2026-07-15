@@ -21,8 +21,17 @@ workbook on 2026-07-12. Runtime evidence is stored in SQLite by
 | Broker idempotency key | 확인 필요 | Not present in the order workbook; test and ask DB Securities |
 | Rate limits | 확인 필요 | Record every used TR limit, configure the lowest value, then mark verified; SQLite enforces a cross-process interval |
 | KRW settlement | 대체 설계 필요 | v1 live accounting is USD-only |
-| Early-close broker cutoff | 확인 필요 | Scheduler assumes documented close-minus-10-minutes, then test |
+| Early-close broker cutoff | 확인 필요 | `automation tick` uses XNYS close-minus-10-minutes; verify the broker cutoff before acceptance |
+| Real-account 1-share LOC / LIMIT / MOC | 확인 필요 | Record instructor-account request/response hashes and results before `live_order_tests_confirmed` |
+| Real-account correction / cancellation | 확인 필요 | Verify composite order identity and final re-query result |
+| Partial fill then cancellation | 확인 필요 | Verify executed quantity, remainder, average cost, cash, fee, and settlement state remain intact |
+| Timeout / network / HTTP 5xx reconciliation | 확인 필요 | Prove UNKNOWN is never resent and next-day inquiry resolves or remains locked |
+| Cash deposit / withdrawal / FX / settlement ledger | 확인 필요 | No verified DB Securities endpoint/fields; `capital scan` remains fail-closed |
 
 `supports_opposing_loc` must equal `확인됨` before installation live enablement.
 If the test fails, automatic live orders remain disabled; the strategy is not
 silently modified.
+
+V2 additionally requires all five real-account acceptance capabilities stored
+by `app capability verify --live-order-tests-confirmed --evidence ...` to be
+`확인됨`. Never set that flag from documentation review alone.

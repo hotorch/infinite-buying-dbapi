@@ -20,10 +20,10 @@ from .models import (
     stable_hash,
 )
 from .strategy import apply_fill, generate_intents, star_price
+from .weather import BENCHMARK_SYMBOL, SIGNAL_SYMBOLS, WeatherDataError, candles_from_rows, compute_weather_history
 
 FEE_RATE = Decimal("0.0004")
 MINIMUM_CAPITAL = Decimal("1")
-MAXIMUM_CAPITAL = Decimal("3000")
 WARMUP_SESSIONS = 5
 DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "market"
 
@@ -55,7 +55,8 @@ def run_backtest(request: dict[str, Any]) -> dict[str, Any]:
     requested_end = parsed["end_date"]
 
     symbol_rows = _load_prices(symbol)
-    benchmark_rows = {row.date: row for row in _load_prices("QQQ")}
+    benchmark_symbol = BENCHMARK_SYMBOL if (DATA_DIR / "spy_adjusted_daily.csv").exists() else "QQQ"
+    benchmark_rows = {row.date: row for row in _load_prices(benchmark_symbol)}
     start_index = next((index for index, row in enumerate(symbol_rows) if row.date >= requested_start), None)
     end_index = next((index for index in range(len(symbol_rows) - 1, -1, -1) if symbol_rows[index].date <= requested_end), None)
     if start_index is None or end_index is None or start_index > end_index:
@@ -67,7 +68,7 @@ def run_backtest(request: dict[str, Any]) -> dict[str, Any]:
     effective_rows = symbol_rows[start_index : end_index + 1]
     missing_benchmark = [row.date.isoformat() for row in effective_rows if row.date not in benchmark_rows]
     if missing_benchmark:
-        raise BacktestError("같은 기간의 QQQ 비교 데이터가 일부 없습니다.", code="MISSING_BENCHMARK_DATA", details={"dates": missing_benchmark[:5]})
+        raise BacktestError(f"같은 기간의 {benchmark_symbol} 비교 데이터가 일부 없습니다.", code="MISSING_BENCHMARK_DATA", details={"dates": missing_benchmark[:5]})
 
     previous_close = symbol_rows[start_index - 1].close
     first_limit = (previous_close * Decimal("1.20")).quantize(Decimal("0.01"))
@@ -197,7 +198,11 @@ def run_backtest(request: dict[str, Any]) -> dict[str, Any]:
     }
     digest_source = {"request": normalized_request, "summary": summary, "assumptions": assumptions, "daily": daily, "events": events}
     assumptions["digest"] = stable_hash(digest_source)
-    weather_daily = _load_regime_weather(effective_rows[0].date, effective_rows[-1].date) if symbol == "TQQQ" else []
+    weather_daily = _load_engine_weather(symbol, effective_rows[0].date, effective_rows[-1].date)
+    if not weather_daily and symbol == "TQQQ":
+        # Read-only compatibility for the distributed V1 dataset. New data
+        # collection writes QQQ/SMH/SPY and uses regime-weather-1 above.
+        weather_daily = _load_regime_weather(effective_rows[0].date, effective_rows[-1].date)
     return {
         "request": normalized_request,
         "summary": summary,
@@ -223,8 +228,6 @@ def _validate_request(request: dict[str, Any]) -> dict[str, Any]:
         raise BacktestError("분할 수는 20, 30, 40 중에서 선택해 주세요.", code="UNSUPPORTED_DIVISION")
     if not capital.is_finite() or capital < MINIMUM_CAPITAL:
         raise BacktestError("초기 자본은 $1 이상 입력해 주세요.", code="CAPITAL_TOO_LOW", details={"minimum_capital": 1})
-    if capital > MAXIMUM_CAPITAL:
-        raise BacktestError("초기 자본은 최대 $3,000까지 입력할 수 있습니다.", code="CAPITAL_TOO_HIGH", details={"maximum_capital": 3000})
     if start_date > end_date:
         raise BacktestError("시작일은 종료일보다 늦을 수 없습니다.", code="REVERSED_DATES")
     return {"symbol": symbol, "division_count": division_count, "capital": capital, "start_date": start_date, "end_date": end_date}
@@ -277,6 +280,45 @@ def _load_regime_weather(start_date: date, end_date: date) -> list[dict[str, Any
             row["reasons"] = [reason for reason in raw["reasons"].split("|") if reason]
             rows.append(row)
     return rows
+
+
+def _load_engine_weather(symbol: str, start_date: date, end_date: date) -> list[dict[str, Any]]:
+    required = (symbol, SIGNAL_SYMBOLS[symbol], BENCHMARK_SYMBOL)
+    if any(not (DATA_DIR / f"{item.lower()}_adjusted_daily.csv").exists() for item in required):
+        return []
+    series: dict[str, Any] = {}
+    for item in required:
+        path = DATA_DIR / f"{item.lower()}_adjusted_daily.csv"
+        with path.open(encoding="utf-8", newline="") as handle:
+            series[item] = candles_from_rows(csv.DictReader(handle))
+    try:
+        snapshots = compute_weather_history(symbol, series)
+    except WeatherDataError:
+        return []
+    return [
+        {
+            "date": snapshot.session_date.isoformat(),
+            "signal_date": snapshot.signal_date.isoformat(),
+            "symbol": snapshot.symbol,
+            "signal_symbol": snapshot.signal_symbol,
+            "benchmark_symbol": snapshot.benchmark_symbol,
+            "regime": snapshot.regime,
+            "weather_state": snapshot.weather_state,
+            "regime_age": snapshot.duration,
+            "strong_green_age": snapshot.duration if snapshot.regime == "strong_green" else 0,
+            "score": _number(snapshot.score),
+            "signal_return_3m": _number(snapshot.momentum_3m),
+            "signal_return_6m": _number(snapshot.momentum_6m),
+            "signal_rs": _number(snapshot.relative_strength),
+            "signal_distance_50": _number(snapshot.distance_50),
+            "signal_sma50_rising_10d": snapshot.sma50_rising_10d,
+            "trade_dollar_volume_multiple": _number(snapshot.dollar_volume_multiple),
+            "reasons": list(snapshot.reason_codes),
+            "ruleset_version": snapshot.ruleset_version,
+        }
+        for snapshot in snapshots
+        if start_date <= snapshot.session_date <= end_date
+    ]
 
 
 def _fill_price(intent: OrderIntent, row: PriceRow) -> Decimal | None:

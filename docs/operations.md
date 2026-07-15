@@ -1,86 +1,41 @@
-# Operator runbook
+# V2 운영 명령
 
-## Installation and setup
-
-```powershell
-uv sync --python 3.12 --extra dev
-uv run app setup --account-alias student-001 --save-api-credentials
-uv run app profile create p1 --symbol TQQQ --division 40 --capital 10000
-uv run app capability verify
-```
-
-Capital is USD. Do not enter a KRW amount. Credentials are prompted and stored
-through Windows Credential Manager. The verified OAuth setting is
-`IB_DBSEC_OAUTH_STYLE=form`.
-
-If a DB Securities credential JSON was temporarily copied into `.env`, migrate
-it once and then remove the `DB_APPKEY` and `DB_APPSECRET` lines:
+모든 실계좌 프로필은 `OFF`로 생성된다. `preview`는 계산만 하며 SQLite와 outbox를 변경하지 않는다.
 
 ```powershell
-uv run app setup --account-alias student-001 --import-env-credentials
+uv run app setup --account-alias student-001 --save-api-credentials --credential-expire-date YYYYMMDD --tqqq-capital 10000 --soxl-capital 10000
+uv run app weather update --symbol TQQQ --json
+uv run app automation readiness --profile tqqq
 ```
 
-`DB_ENV=real` describes the broker credential bundle; it is separate from the
-application's `IB_ENVIRONMENT=preview|paper|live` execution mode.
-Set `IB_DBSEC_REQUESTS_PER_SECOND` only after recording the lowest official
-limit among every TR used by this installation. Live mode rejects a missing
-value.
+`IB_DBSEC_ACCOUNT_MODE=real`이 기본이다. `IB_ENVIRONMENT`는 제거되었으며 존재하면 명시적 오류가 난다. APP KEY·SECRET·토큰은 OS keychain에만 둔다.
 
-The read-only balance endpoint may return business code `2679` when there are
-no overseas-stock rows. The adapter normalizes that code to an empty holdings
-or transaction-history list. Any other non-success business code stops reconciliation and must not be
-silently converted to an empty account.
-
-## Read-only DB Securities checks
+Hermes cron 3개를 생성·검증한 뒤에만 다음을 실행한다.
 
 ```powershell
-uv run app dbsec auth-status
-uv run app dbsec balance
-uv run app dbsec holdings
-uv run app dbsec transaction-history --start 2026-07-01 --end 2026-07-13
-uv run app dbsec current-price --symbol TQQQ
-uv run app dbsec daily-chart --symbol TQQQ --start 2026-07-01 --end 2026-07-13
+uv run app automation on --profile tqqq --cron-verified
+uv run app automation status tqqq --json
 ```
 
-These commands have no raw-JSON mode and never call the order path. Reconcile
-an existing profile with `uv run app reconcile p1 --environment live`; a
-quantity mismatch persists `RECONCILIATION_REQUIRED` and blocks execution.
-When no verified rate is configured, read-only commands use a conservative
-one-request-per-second local limit. Live reconciliation and orders still
-require the verified `IB_DBSEC_REQUESTS_PER_SECOND` setting.
-
-## Daily preview
+OFF는 신규 주문을 먼저 막고 미체결 취소·재조회를 수행한다. 결과가 불명확하면 `LOCKED`로 남는다.
 
 ```powershell
-uv run app preview p1 --previous-close 100 --completed-closes 96,97,98,99,100
-uv run app scheduler show --session-date 2026-07-13
-uv run app scheduler install p1 --confirm
+uv run app automation off --profile tqqq
+uv run app reconcile --profile tqqq --json
 ```
 
-Run sell phase after the session-relative premarket time, reconcile, then run
-buy phase after the regular open. Preview is the default environment.
-
-## Live controls
-
-Live requires successful testbed evidence plus external legal/risk review:
+Hermes용 안정적인 조회 명령:
 
 ```powershell
-uv run app capability verify --opposing-loc-confirmed --rate-limits-confirmed --evidence "..."
-uv run app live enable --legal-review-ack --risk-disclosure-ack
-uv run app emergency-stop off
-uv run app live approve-today --session-date 2026-07-13
+uv run app position status tqqq --json
+uv run app position cycles tqqq --json
+uv run app position sessions tqqq --cycle 1 --json
+uv run app orders list --profile tqqq --json
+uv run app weather current --symbol TQQQ --json
+uv run app capital status
+uv run app report daily --session-date latest --json
 ```
 
-Any mismatch must be resolved through `app reconcile`; do not edit SQLite by
-hand. An ambiguous order result must be queried at the broker and must never be
-blindly resubmitted.
+UNKNOWN, 수량·현금 불일치, 비정상 출금 또는 데이터 오류가 있으면 재전송하지 않는다. SQLite를 직접 고치지 말고 `emergency-stop on`, 백업, 대사 순서로 처리한다.
 
-## Recovery
-
-```powershell
-uv run app emergency-stop on
-uv run app backup create backups/state-20260713.sqlite3
-uv run app diagnostics --output diagnostics/report.json --redacted
-```
-
-Restore requires `--confirm` and validates SQLite integrity first.
+Hermes 설치·cron·Slack 계약은 [Hermes 핸드오프](hermes-handoff.md)를 따른다.

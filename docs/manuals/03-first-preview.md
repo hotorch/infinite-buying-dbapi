@@ -46,7 +46,7 @@ uv run app preview p1 --previous-close 100 --completed-closes 96,97,98,99,100
 
 ## 30분할 안내
 
-30분할은 일반화된 공식을 사용하는 실험 프로필입니다. preview, paper, replay는 가능하지만 live는 코드에서 거부합니다.
+30분할은 일반화된 공식을 사용하는 실험 프로필입니다. preview와 백테스트만 가능하고 실주문은 코드에서 거부합니다.
 
 ## 계산 결과가 비어 있을 때
 

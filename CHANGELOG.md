@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-07-15
+
+- Replaced local paper, daily approvals, Task Scheduler, and repository Slack delivery with OFF/ON/LOCKED profiles and a Hermes-owned JSON automation contract.
+- Added SQLite v1→v2 migration, composite broker order identity, cross-day UNKNOWN tracking, cycle/session ledgers, weather snapshots, capital events, and automation claims.
+- Added the embedded `regime-weather-1` engine for TQQQ/QQQ/SPY and SOXL/SMH/SPY, shared backtesting, and five-symbol DB Securities market-data collection.
+- Added settled-USD allocation choices, stable position/order/report JSON commands, dashboard updates, Hermes handoff documentation, and an installable operator skill.
+- Kept real ordering fail-closed until instructor-account LOC/LIMIT/MOC, cancellation, partial-fill, and timeout-reconciliation evidence is recorded.
+
+- Replaced the conflicting MIT notice with consistent all-rights-reserved terms that prohibit recipient redistribution without prior written permission.
 - Changed the DB Securities OAuth default to the form contract verified by the downloadable specification, official testbed sample, and a real-key read-only call.
 - Added one-time import of DB-issued `DB_APPKEY`, `DB_APPSECRET`, `DB_ENV`, and `DB_EXPIRE_DATE` values into Windows Credential Manager.
 - Treat DB Securities balance code `2679` as an empty overseas-stock balance while preserving fail-closed handling for every other error code.

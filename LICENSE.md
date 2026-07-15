@@ -1,9 +1,12 @@
 # License status
 
-No redistribution license has been granted for this project or for the strategy
-research materials referenced during development. All rights are reserved until
-the owner selects and publishes an explicit software license.
+Copyright (c) 2026 Hoyoung Jeong. All rights reserved.
 
-Before distributing this product to students, complete the copyright, strategy
-name, automated-order, investment-service, privacy, and risk-disclosure reviews
-described in `docs/implementation-plan.md`.
+The copyright owner may share this project directly with authorized
+recipients. Recipients are not granted permission to redistribute, republish,
+sublicense, sell, or otherwise provide the software, its documentation, or the
+referenced strategy research materials to any third party.
+
+Access to the project does not grant rights to copy, modify, create derivative
+works from, or commercially use it except with the copyright owner's prior
+written permission. See the root `LICENSE` file for the controlling terms.

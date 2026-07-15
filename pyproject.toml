@@ -4,10 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "infinite-buying-dbapi"
-version = "0.1.0"
+version = "0.2.0"
 description = "Deterministic Pure Infinite Buying V4 engine with a safely gated DB Securities adapter"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.12"
+classifiers = ["Private :: Do Not Upload"]
 dependencies = [
   "exchange-calendars>=4.7,<5",
   "httpx>=0.27,<1",

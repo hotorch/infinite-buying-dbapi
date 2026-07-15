@@ -13,11 +13,10 @@ type Props = {
 };
 
 const steps = ["데이터 확인", "전략 계산", "결과 준비"];
-const MAX_CAPITAL = 3000;
 
 export function BacktestForm({ value, maxDate, onChange, onSubmit, onCollect, running, collecting, collectionStatus, progress }: Props) {
   const update = (field: keyof BacktestRequest, next: string | number) => onChange({ ...value, [field]: next });
-  const capitalInvalid = !Number.isFinite(value.capital) || value.capital < 1 || value.capital > MAX_CAPITAL;
+  const capitalInvalid = !Number.isFinite(value.capital) || value.capital < 1;
   return (
     <section className="controlPanel" aria-labelledby="control-title">
       <div className="panelHeading">
@@ -45,8 +44,8 @@ export function BacktestForm({ value, maxDate, onChange, onSubmit, onCollect, ru
         </label>
         <label>
           <span>초기 자본 (USD)</span>
-          <div className="currencyInput"><b>$</b><input type="number" min={1} max={MAX_CAPITAL} step={100} value={value.capital} aria-invalid={capitalInvalid} aria-describedby="capital-help" onChange={(event) => update("capital", Number(event.target.value))} /></div>
-          <small id="capital-help" className={capitalInvalid ? "fieldHelp error" : "fieldHelp"}>{capitalInvalid ? "$1~$3,000 사이로 입력해 주세요." : "최대 $3,000"}</small>
+          <div className="currencyInput"><b>$</b><input type="number" min={1} step={100} value={value.capital} aria-invalid={capitalInvalid} aria-describedby="capital-help" onChange={(event) => update("capital", Number(event.target.value))} /></div>
+          <small id="capital-help" className={capitalInvalid ? "fieldHelp error" : "fieldHelp"}>{capitalInvalid ? "$1 이상 입력해 주세요." : "명시한 USD 자금"}</small>
         </label>
         <label>
           <span>시작일</span>

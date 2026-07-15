@@ -93,6 +93,7 @@ def generate_intents(
             "symbol": profile.symbol,
             "side": side,
             "role": role,
+            "input_hash": input_hash,
         }
         intents.append(
             OrderIntent(
@@ -189,20 +190,20 @@ def apply_fill(profile: StrategyProfile, state: StrategyState, intent: OrderInte
     ratio = fill.fill_ratio
     value = fill.fill_price * fill.filled_qty
     if fill.side == Side.BUY:
-        if value > state.cash:
+        if value + fill.fee > state.cash:
             raise ValueError("fill exceeds available cash")
         new_quantity = state.quantity + fill.filled_qty
         new_cost = state.cost_basis + value
         if fill.role == IntentRole.REVERSE_BUY:
             delta = (Decimal(profile.division_count) - state.t) * Decimal("0.25") * ratio
             return state.evolved(
-                cash=state.cash - value,
+                cash=state.cash - value - fill.fee,
                 quantity=new_quantity,
-                cost_basis=new_cost,
+                cost_basis=new_cost + fill.fee,
                 t=state.t + delta,
                 reverse_cash_used=state.reverse_cash_used + value,
             )
-        return state.evolved(cash=state.cash - value, quantity=new_quantity, cost_basis=new_cost, t=state.t + intent.planned_t_effect * ratio)
+        return state.evolved(cash=state.cash - value - fill.fee, quantity=new_quantity, cost_basis=new_cost + fill.fee, t=state.t + intent.planned_t_effect * ratio)
 
     if fill.filled_qty > state.quantity:
         raise ValueError("sell fill exceeds holdings")
@@ -211,7 +212,7 @@ def apply_fill(profile: StrategyProfile, state: StrategyState, intent: OrderInte
     remaining_cost = state.cost_basis - cost_reduction if remaining_quantity else ZERO
     factor = Decimal(1) - intent.planned_t_effect * ratio
     evolved = state.evolved(
-        cash=state.cash + value,
+        cash=state.cash + value - fill.fee,
         quantity=remaining_quantity,
         cost_basis=remaining_cost,
         t=state.t * factor,

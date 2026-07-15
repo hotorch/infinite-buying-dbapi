@@ -79,7 +79,7 @@ export default function DashboardPage() {
       setRequest(nextRequest);
       setCollectionStatus(
         payload.updated
-          ? `TQQQ·SOXL·QQQ 캔들 ${payload.added.toLocaleString()}건을 추가해 ${payload.latest_completed_session}까지 채웠습니다.`
+          ? `TQQQ·SOXL·QQQ·SMH·SPY 캔들 ${payload.added.toLocaleString()}건을 추가해 ${payload.latest_completed_session}까지 채웠습니다.`
           : `이미 최신 상태입니다. 마지막 완료 거래일은 ${payload.latest_completed_session}입니다.`,
       );
       await run(nextRequest);

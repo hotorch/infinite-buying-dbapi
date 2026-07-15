@@ -8,6 +8,22 @@ from .store import StateStore
 from .strategy import generate_intents
 
 
+def preview_phase(
+    store: StateStore,
+    profile_id: str,
+    session_date: date,
+    previous_close: Decimal,
+    phase: Phase,
+    completed_closes: tuple[Decimal, ...] = (),
+) -> list[OrderIntent]:
+    """Calculate a phase without mutating strategy state, decisions, or outbox."""
+    profile = store.get_profile(profile_id)
+    state = store.get_state(profile_id)
+    snapshot = MarketSnapshot(session_date=session_date, previous_close=previous_close, completed_closes=completed_closes)
+    _, intents = generate_intents(profile, state, snapshot, phase)
+    return intents
+
+
 def plan_phase(
     store: StateStore,
     profile_id: str,

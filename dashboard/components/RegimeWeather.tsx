@@ -80,6 +80,7 @@ export function RegimeWeather({ weather, symbol, selectedDate, latestAvailableDa
   const isFallback = weather.date !== selectedDate;
   const chaseWarning = weather.regime === "strong_green" && (weather.signal_distance_50 ?? 0) >= 0.05;
   const reasonLabels = weather.reasons.map((reason) => REASON_LABELS[reason] ?? reason.replaceAll("_", " "));
+  const signal = weather.signal_symbol;
 
   return (
     <section className={`weatherSection weatherTone-${weather.weather_state}`} aria-labelledby="weather-title">
@@ -115,8 +116,8 @@ export function RegimeWeather({ weather, symbol, selectedDate, latestAvailableDa
 
         <dl className="weatherMetrics">
           <Metric label="레짐 점수" value={weather.score.toFixed(3)} note="strong 기준 0.200" pass={weather.score >= 0.2} />
-          <Metric label="QQQ 3개월" value={formatPercent(weather.signal_return_3m)} note="strong 기준 +8%" pass={(weather.signal_return_3m ?? -1) >= 0.08} />
-          <Metric label="QQQ 6개월" value={formatPercent(weather.signal_return_6m)} note="strong 기준 +12%" pass={(weather.signal_return_6m ?? -1) >= 0.12} />
+          <Metric label={`${signal} 3개월`} value={formatPercent(weather.signal_return_3m)} note="strong 기준 +8%" pass={(weather.signal_return_3m ?? -1) >= 0.08} />
+          <Metric label={`${signal} 6개월`} value={formatPercent(weather.signal_return_6m)} note="strong 기준 +12%" pass={(weather.signal_return_6m ?? -1) >= 0.12} />
           <Metric label="SPY 대비 RS" value={formatPercent(weather.signal_rs)} note="strong 기준 +8%" pass={(weather.signal_rs ?? -1) >= 0.08} />
           <Metric label="50일선 이격" value={formatPercent(weather.signal_distance_50)} note="strong 상한 +8%" pass={(weather.signal_distance_50 ?? 1) <= 0.08} />
         </dl>
@@ -147,7 +148,7 @@ export function RegimeWeather({ weather, symbol, selectedDate, latestAvailableDa
         <details>
           <summary>레짐 점수는 어떻게 계산하나요?</summary>
           <p><code>0.70 × (3개월×0.50 + 6개월×0.30 + 12개월×0.20) + RS×0.35 - 50일선 상방이격×0.15 + 유동성 보너스</code></p>
-          <p>유동성 보너스는 TQQQ 달러 거래대금을 1억 달러로 나눈 값에 0.05를 곱하며 최대 0.05입니다. 현재 거래대금은 기본 하한의 {weather.trade_dollar_volume_multiple?.toFixed(1) ?? "?"}배입니다.</p>
+          <p>유동성 보너스는 {symbol} 달러 거래대금을 1억 달러로 나눈 값에 0.05를 곱하며 최대 0.05입니다. 현재 거래대금은 기본 하한의 {weather.trade_dollar_volume_multiple?.toFixed(1) ?? "?"}배입니다.</p>
         </details>
 
         <div className="regimeAccordion">
@@ -187,9 +188,7 @@ function RegimeExplanation({ state, current }: { state: WeatherState; current: b
 }
 
 function MissingWeather({ selectedDate, symbol }: { selectedDate: string; symbol: "TQQQ" | "SOXL" }) {
-  const message = symbol === "SOXL"
-    ? "SOXL용 일별 날씨 데이터는 아직 제공되지 않습니다."
-    : `${selectedDate ? `${shortDate(selectedDate)}은` : "선택한 날짜는"} 220거래일 지표 준비 구간이라 날씨를 계산할 수 없습니다.`;
+  const message = `${selectedDate ? `${shortDate(selectedDate)}은` : "선택한 날짜는"} ${symbol === "SOXL" ? "SMH·SPY" : "QQQ·SPY"}를 포함한 220거래일 지표가 없어 날씨를 계산할 수 없습니다.`;
   return (
     <section className="weatherSection weatherMissing" aria-labelledby="weather-title">
       <div className="weatherHeading"><div><h2 id="weather-title">선택한 날짜의 무한매수 날씨</h2><p>{message}</p></div></div>

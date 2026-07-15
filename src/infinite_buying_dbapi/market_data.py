@@ -17,8 +17,15 @@ import pandas as pd
 from .market_calendar import NEW_YORK
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "market"
-COLLECTED_SYMBOLS = ("TQQQ", "SOXL", "QQQ")
-MARKET_CODES = {"TQQQ": "FN", "SOXL": "FA", "QQQ": "FN"}
+COLLECTED_SYMBOLS = ("TQQQ", "SOXL", "QQQ", "SMH", "SPY")
+MARKET_CODES = {"TQQQ": "FN", "SOXL": "FA", "QQQ": "FN", "SMH": "FN", "SPY": "FA"}
+BOOTSTRAP_START_DATES = {
+    "TQQQ": date(2010, 2, 11),
+    "SOXL": date(2010, 3, 11),
+    "QQQ": date(2010, 1, 4),
+    "SMH": date(2010, 1, 4),
+    "SPY": date(2010, 1, 4),
+}
 CSV_COLUMNS = ("date", "symbol", "open", "high", "low", "close", "volume")
 
 
@@ -47,7 +54,11 @@ def market_data_status(data_dir: Path = DATA_DIR, now: datetime | None = None) -
     target = latest_completed_session(now)
     symbols = []
     for symbol in COLLECTED_SYMBOLS:
-        rows = _read_rows(data_dir / _filename(symbol), symbol)
+        path = data_dir / _filename(symbol)
+        if not path.exists():
+            symbols.append({"symbol": symbol, "last_date": None, "needs_update": True})
+            continue
+        rows = _read_rows(path, symbol)
         last_date = date.fromisoformat(rows[-1]["date"])
         symbols.append({"symbol": symbol, "last_date": last_date.isoformat(), "needs_update": last_date < target})
     return {
@@ -64,24 +75,59 @@ def collect_market_data(source: CandleSource, data_dir: Path = DATA_DIR, now: da
 
     for symbol in COLLECTED_SYMBOLS:
         path = data_dir / _filename(symbol)
+        bootstrap_start = BOOTSTRAP_START_DATES[symbol]
+        if not path.exists():
+            fetched = source.daily_candles(symbol, bootstrap_start, target, market_code=MARKET_CODES[symbol])
+            fetched_by_date = {item["date"]: item for item in fetched if bootstrap_start <= item["date"] <= target}
+            if not fetched_by_date:
+                raise MarketDataError(f"{symbol}: DB Securities returned no bootstrap sessions")
+            coverage_start = min(fetched_by_date)
+            expected = {stamp.date() for stamp in xcals.get_calendar("XNYS").sessions_in_range(coverage_start, target)}
+            missing = sorted(expected - set(fetched_by_date))
+            if missing:
+                raise MarketDataError(f"{symbol}: DB Securities did not return bootstrap sessions: {', '.join(day.isoformat() for day in missing[:5])}")
+            rows = [_row_from_candle(symbol, fetched_by_date[day]) for day in sorted(fetched_by_date)]
+            _validate_rows(symbol, rows)
+            prepared[symbol] = _csv_bytes(rows)
+            summaries.append({"symbol": symbol, "previous_last_date": None, "last_date": rows[-1]["date"], "added": len(rows)})
+            continue
         rows = _read_rows(path, symbol)
+        previous_first = date.fromisoformat(rows[0]["date"])
         previous_last = date.fromisoformat(rows[-1]["date"])
-        if previous_last >= target:
+        needs_backfill = previous_first > bootstrap_start
+        if previous_last >= target and not needs_backfill:
             summaries.append(
                 {"symbol": symbol, "previous_last_date": previous_last.isoformat(), "last_date": previous_last.isoformat(), "added": 0}
             )
             continue
 
-        fetched = source.daily_candles(symbol, previous_last, target, market_code=MARKET_CODES[symbol])
-        fetched_by_date = {item["date"]: item for item in fetched if previous_last <= item["date"] <= target}
-        expected = {stamp.date() for stamp in xcals.get_calendar("XNYS").sessions_in_range(previous_last, target)}
+        fetch_start = bootstrap_start if needs_backfill else previous_last
+        fetched = source.daily_candles(symbol, fetch_start, target, market_code=MARKET_CODES[symbol])
+        fetched_by_date = {item["date"]: item for item in fetched if fetch_start <= item["date"] <= target}
+        if not fetched_by_date:
+            raise MarketDataError(f"{symbol}: DB Securities returned no completed sessions")
+        coverage_start = min(fetched_by_date) if needs_backfill else fetch_start
+        if needs_backfill and coverage_start > previous_first:
+            raise MarketDataError(f"{symbol}: DB Securities history did not reach the stored first session")
+        expected = {stamp.date() for stamp in xcals.get_calendar("XNYS").sessions_in_range(coverage_start, target)}
         missing = sorted(expected - set(fetched_by_date))
         if missing:
             raise MarketDataError(f"{symbol}: DB Securities did not return completed sessions: {', '.join(day.isoformat() for day in missing[:5])}")
 
-        _assert_overlap_matches(symbol, rows[-1], fetched_by_date[previous_last])
-        additions = [_row_from_candle(symbol, fetched_by_date[day]) for day in sorted(fetched_by_date) if day > previous_last]
-        merged = rows + additions
+        if needs_backfill:
+            for stored in rows:
+                stored_date = date.fromisoformat(stored["date"])
+                if stored_date <= target:
+                    _assert_overlap_matches(symbol, stored, fetched_by_date[stored_date])
+            merged_by_date = {item["date"]: item for item in (_row_from_candle(symbol, fetched_by_date[day]) for day in sorted(fetched_by_date))}
+            merged_by_date.update({item["date"]: item for item in rows if date.fromisoformat(item["date"]) > target})
+            merged = [merged_by_date[day] for day in sorted(merged_by_date)]
+            added_count = len(merged) - len(rows)
+        else:
+            _assert_overlap_matches(symbol, rows[-1], fetched_by_date[previous_last])
+            additions = [_row_from_candle(symbol, fetched_by_date[day]) for day in sorted(fetched_by_date) if day > previous_last]
+            merged = rows + additions
+            added_count = len(additions)
         _validate_rows(symbol, merged)
         prepared[symbol] = _csv_bytes(merged)
         summaries.append(
@@ -89,7 +135,7 @@ def collect_market_data(source: CandleSource, data_dir: Path = DATA_DIR, now: da
                 "symbol": symbol,
                 "previous_last_date": previous_last.isoformat(),
                 "last_date": merged[-1]["date"],
-                "added": len(additions),
+                "added": added_count,
             }
         )
 

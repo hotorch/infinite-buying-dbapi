@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import itertools
 from collections.abc import Callable
-from datetime import date, datetime
-from decimal import Decimal
+from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from typing import Any, Protocol
 
@@ -25,53 +24,6 @@ class Broker(Protocol):
     def cancel_order(self, broker_order_no: str, intent: OrderIntent) -> BrokerOrder: ...
 
 
-class PreviewBroker:
-    def place_order(self, intent: OrderIntent) -> BrokerOrder:
-        return BrokerOrder(
-            broker_order_no=f"PREVIEW-{intent.intent_id[:12]}",
-            intent_id=intent.intent_id,
-            status="PREVIEW",
-            requested_qty=intent.quantity,
-            remaining_qty=intent.quantity,
-            raw_response_hash="preview",
-        )
-
-    def cancel_order(self, broker_order_no: str, intent: OrderIntent) -> BrokerOrder:
-        return BrokerOrder(
-            broker_order_no=broker_order_no,
-            intent_id=intent.intent_id,
-            status="CANCELLED",
-            requested_qty=intent.quantity,
-            remaining_qty=0,
-            raw_response_hash="preview-cancel",
-        )
-
-
-class PaperBroker:
-    def __init__(self) -> None:
-        self._counter = itertools.count(1)
-
-    def place_order(self, intent: OrderIntent) -> BrokerOrder:
-        return BrokerOrder(
-            broker_order_no=f"PAPER-{next(self._counter):08d}",
-            intent_id=intent.intent_id,
-            status="ACCEPTED",
-            requested_qty=intent.quantity,
-            remaining_qty=intent.quantity,
-            raw_response_hash=sha256(intent.intent_id.encode()).hexdigest(),
-        )
-
-    def cancel_order(self, broker_order_no: str, intent: OrderIntent) -> BrokerOrder:
-        return BrokerOrder(
-            broker_order_no=broker_order_no,
-            intent_id=intent.intent_id,
-            status="CANCELLED",
-            requested_qty=intent.quantity,
-            remaining_qty=0,
-            raw_response_hash="paper-cancel",
-        )
-
-
 class DbSecBroker:
     ORDER_PATH = "/api/v1/trading/overseas-stock/order"
     TRANSACTION_PATH = "/api/v1/trading/overseas-stock/inquiry/transaction-history"
@@ -90,12 +42,14 @@ class DbSecBroker:
         timeout_seconds: float = 10.0,
         client: httpx.Client | None = None,
         before_request: Callable[[], None] | None = None,
+        account_alias: str = "default",
     ):
         if not access_token:
             raise ValueError("access token is required")
         self.client = client or httpx.Client(base_url=base_url, timeout=timeout_seconds)
         self.access_token = access_token
         self.before_request = before_request or (lambda: None)
+        self.account_alias = account_alias
 
     def _headers(self, *, continuation: bool = False, continuation_key: str = "") -> dict[str, str]:
         token = self.access_token if self.access_token.lower().startswith("bearer ") else f"Bearer {self.access_token}"
@@ -116,6 +70,8 @@ class DbSecBroker:
         payload = self.build_order_payload(intent, trade_code="2", original_order_no=broker_order_no)
         payload["In"]["AstkIsuNo"] = symbol
         response = self._post_order(payload)
+        if "rsp_cd" not in response:
+            raise AmbiguousOrderError("cancellation response schema is unknown; reconcile before any retry")
         if response.get("rsp_cd") != "00000":
             raise BrokerError(f"DB Securities rejected cancellation: {response.get('rsp_cd')} {response.get('rsp_msg', '')}")
         return BrokerOrder(
@@ -125,6 +81,9 @@ class DbSecBroker:
             requested_qty=intent.quantity,
             remaining_qty=intent.quantity,
             raw_response_hash=sha256(canonical_json(response).encode()).hexdigest(),
+            account_alias=self.account_alias,
+            order_date=intent.session_date,
+            submitted_at=datetime.now(timezone.utc),
         )
 
     def transaction_history(
@@ -214,8 +173,12 @@ class DbSecBroker:
         payload["In"]["AstkIsuNo"] = symbol
         response = self._post_order(payload)
         out = response.get("Out") or {}
-        if response.get("rsp_cd") != "00000" or not out.get("OrdNo"):
+        if "rsp_cd" not in response:
+            raise AmbiguousOrderError("order response schema is unknown; reconcile before any retry")
+        if response.get("rsp_cd") != "00000":
             raise BrokerError(f"DB Securities rejected order: {response.get('rsp_cd')} {response.get('rsp_msg', '')}")
+        if not isinstance(out, dict) or not out.get("OrdNo"):
+            raise AmbiguousOrderError("accepted order response has no order number; reconcile before any retry")
         return BrokerOrder(
             broker_order_no=str(out["OrdNo"]),
             intent_id=intent.intent_id,
@@ -223,6 +186,9 @@ class DbSecBroker:
             requested_qty=intent.quantity,
             remaining_qty=intent.quantity,
             raw_response_hash=sha256(canonical_json(response).encode()).hexdigest(),
+            account_alias=self.account_alias,
+            order_date=intent.session_date,
+            submitted_at=datetime.now(timezone.utc),
         )
 
     def raw_inquiry(self, path: str, body: dict[str, Any], *, continuation_key: str = "") -> tuple[dict[str, Any], str]:
@@ -259,7 +225,7 @@ class DbSecBroker:
         out = response.get("Out") or {}
         try:
             return Decimal(str(out["AstkOrdAbleAmt"])), int(Decimal(str(out["AstkOrdAbleQty"])))
-        except (KeyError, ValueError, TypeError) as exc:
+        except (InvalidOperation, KeyError, ValueError, TypeError) as exc:
             raise BrokerError("DB Securities orderable response is missing required fields") from exc
 
     def current_price(self, symbol: str, market_code: str = "FN") -> Decimal:
@@ -271,7 +237,7 @@ class DbSecBroker:
             raise BrokerError(f"DB Securities price inquiry failed: {response.get('rsp_cd')} {response.get('rsp_msg', '')}")
         try:
             price = Decimal(str((response.get("Out") or {})["Prpr"]))
-        except (KeyError, ValueError, TypeError) as exc:
+        except (InvalidOperation, KeyError, ValueError, TypeError) as exc:
             raise BrokerError("DB Securities price response is missing Prpr") from exc
         if price <= 0:
             raise BrokerError("DB Securities returned a non-positive current price")
@@ -301,7 +267,7 @@ class DbSecBroker:
                         "volume": int(Decimal(str(row["AcmlVol"]))),
                     }
                 )
-            except (KeyError, ValueError, TypeError) as exc:
+            except (InvalidOperation, KeyError, ValueError, TypeError) as exc:
                 raise BrokerError("DB Securities daily chart row is malformed") from exc
         return sorted(normalized, key=lambda item: item["date"])
 
@@ -313,8 +279,13 @@ class DbSecBroker:
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             raise AmbiguousOrderError("order result is unknown; reconcile before any retry") from exc
         except httpx.HTTPStatusError as exc:
+            if 500 <= exc.response.status_code <= 599:
+                raise AmbiguousOrderError("order HTTP 5xx result is unknown; reconcile before any retry") from exc
             raise BrokerError(f"DB Securities HTTP error: {exc.response.status_code}") from exc
         try:
-            return response.json()
+            result = response.json()
         except ValueError as exc:
             raise AmbiguousOrderError("order response was not valid JSON; reconcile before any retry") from exc
+        if not isinstance(result, dict):
+            raise AmbiguousOrderError("order response was not an object; reconcile before any retry")
+        return result

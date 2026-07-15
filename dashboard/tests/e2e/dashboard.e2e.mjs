@@ -30,10 +30,11 @@ try {
   await waitForServer();
   await testDashboardShell();
   await testDefaultBacktest();
+  await testSoxlBacktest();
   await testDeterministicResult();
   await testHolidayDateMapping();
   await testValidationErrors();
-  console.log("E2E PASS: 7 scenarios");
+  console.log("E2E PASS: 8 scenarios");
 } catch (error) {
   console.error(serverOutput.join(""));
   throw error;
@@ -87,7 +88,7 @@ async function testDefaultBacktest() {
   assert.ok(result.body.weather_daily.length > 0);
   assert.equal(result.body.weather_daily.at(-1).date, "2026-07-10");
   assert.equal(result.body.weather_daily.at(-1).signal_date, "2026-07-09");
-  assert.equal(result.body.weather_daily.at(-1).weather_state, "green");
+  assert.equal(result.body.weather_daily.at(-1).weather_state, "strong_green");
   assert.equal(result.body.assumptions.effective_dates.start, "2021-07-12");
   assert.equal(result.body.assumptions.effective_dates.end, "2026-07-10");
   assert.match(result.body.assumptions.digest, /^[0-9a-f]{64}$/);
@@ -96,6 +97,23 @@ async function testDefaultBacktest() {
     Object.keys(result.body.events[0]).sort(),
     ["cycle_id", "date", "fee", "price", "quantity", "reason_code", "role", "side"].sort(),
   );
+}
+
+async function testSoxlBacktest() {
+  const result = await postBacktest({
+    symbol: "SOXL",
+    division_count: 20,
+    capital: 10_000,
+    start_date: "2021-07-10",
+    end_date: "2026-07-10",
+  });
+  assert.equal(result.response.status, 200);
+  assert.equal(result.body.request.symbol, "SOXL");
+  assert.equal(result.body.summary.trading_days, 1255);
+  assert.equal(result.body.weather_daily.length, 1255);
+  assert.equal(result.body.weather_daily.at(-1).signal_symbol, "SMH");
+  assert.equal(result.body.weather_daily.at(-1).benchmark_symbol, "SPY");
+  assert.equal(result.body.weather_daily.at(-1).ruleset_version, "regime-weather-1");
 }
 
 async function testDeterministicResult() {
@@ -136,9 +154,9 @@ async function testValidationErrors() {
   };
   const cases = [
     [{ ...base, capital: 0 }, "CAPITAL_TOO_LOW", "초기 자본은 $1 이상 입력해 주세요."],
-    [{ ...base, capital: 3_001 }, "CAPITAL_TOO_HIGH", "초기 자본은 최대 $3,000까지 입력할 수 있습니다."],
     [{ ...base, start_date: "2025-04-01" }, "REVERSED_DATES", "시작일은 종료일보다 늦을 수 없습니다."],
-    [{ ...base, symbol: "SOXL" }, "UNSUPPORTED_SYMBOL", "첫 버전에서는 TQQQ만 백테스트할 수 있습니다."],
+    [{ ...base, symbol: "QQQ" }, "UNSUPPORTED_SYMBOL", "TQQQ 또는 SOXL만 백테스트할 수 있습니다."],
+    [{ ...base, division_count: 25 }, "UNSUPPORTED_DIVISION", "분할 수는 20, 30, 40 중에서 선택해 주세요."],
   ];
   for (const [request, code, message] of cases) {
     const result = await postBacktest(request);

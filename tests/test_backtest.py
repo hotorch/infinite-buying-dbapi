@@ -47,7 +47,6 @@ def test_backtest_contract_is_complete_and_deterministic() -> None:
     ("changes", "code"),
     [
         ({"capital": 0}, "CAPITAL_TOO_LOW"),
-        ({"capital": 3001}, "CAPITAL_TOO_HIGH"),
         ({"start_date": "2025-03-01", "end_date": "2025-01-01"}, "REVERSED_DATES"),
         ({"symbol": "QQQ"}, "UNSUPPORTED_SYMBOL"),
         ({"division_count": 25}, "UNSUPPORTED_DIVISION"),
@@ -64,8 +63,17 @@ def test_non_session_dates_are_mapped_to_effective_sessions() -> None:
     assert result["assumptions"]["effective_dates"] == {"start": "2025-01-06", "end": "2025-01-10"}
 
 
-def test_soxl_backtest_is_supported_without_tqqq_weather() -> None:
+def test_backtest_accepts_explicit_capital_above_old_dashboard_cap() -> None:
+    result = run_backtest(request(capital=10000))
+    assert result["request"]["capital"] == 10000
+
+
+def test_soxl_backtest_uses_smh_weather_engine() -> None:
     result = run_backtest(request(symbol="SOXL"))
     assert result["request"]["symbol"] == "SOXL"
     assert result["daily"]
-    assert result["weather_daily"] == []
+    assert result["weather_daily"]
+    assert {row["symbol"] for row in result["weather_daily"]} == {"SOXL"}
+    assert {row["signal_symbol"] for row in result["weather_daily"]} == {"SMH"}
+    assert {row["benchmark_symbol"] for row in result["weather_daily"]} == {"SPY"}
+    assert {row["ruleset_version"] for row in result["weather_daily"]} == {"regime-weather-1"}

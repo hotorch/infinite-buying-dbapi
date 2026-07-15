@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_on": "2026-07-14",
+  "generated_on": "2026-07-15",
   "source": {
     "name": "Toss Securities Open API",
     "endpoint": "/api/v1/candles",
@@ -22,24 +22,38 @@
   "files": {
     "qqq_adjusted_daily.csv": {
       "symbol": "QQQ",
-      "rows": 6877,
+      "rows": 6878,
       "first_date": "1999-03-10",
-      "last_date": "2026-07-13",
-      "sha256": "fa66423b696c9f77602309cd9e7a92b56ad17d96bd532ecaa6b9c352d1b3f509"
+      "last_date": "2026-07-14",
+      "sha256": "0cca06e644482525b4622fce7a01f46101083525a79c20937ca87615a8e3014c"
     },
     "soxl_adjusted_daily.csv": {
       "symbol": "SOXL",
-      "rows": 4109,
+      "rows": 4110,
       "first_date": "2010-03-11",
-      "last_date": "2026-07-13",
-      "sha256": "b0f2e663926d4414331cff59f6ed1992c4fd55897d2a120c9c210d50ded55d51"
+      "last_date": "2026-07-14",
+      "sha256": "38b696c84c918acdb553ab6011877dd50736f2cac7e89607cae2dbad80796c13"
     },
     "tqqq_adjusted_daily.csv": {
       "symbol": "TQQQ",
-      "rows": 4128,
+      "rows": 4129,
       "first_date": "2010-02-11",
-      "last_date": "2026-07-13",
-      "sha256": "fa58c43dee5b00a69a037be24d443e15f192aa30046067e1bba3518133e9fd7b"
+      "last_date": "2026-07-14",
+      "sha256": "af68be202c5f7e2d024096b6cfefe452858aa7d9d78e4ea00bde661bb3c97e5f"
+    },
+    "smh_adjusted_daily.csv": {
+      "symbol": "SMH",
+      "rows": 1654,
+      "first_date": "2019-12-11",
+      "last_date": "2026-07-14",
+      "sha256": "4bdc50e7275b576b067d846a22dba22179a78d1c052c08553ec70b3ba1bff879"
+    },
+    "spy_adjusted_daily.csv": {
+      "symbol": "SPY",
+      "rows": 2646,
+      "first_date": "2016-01-04",
+      "last_date": "2026-07-14",
+      "sha256": "a58a1f0b1c4d2b92b8c911aa30e8ed007909026492729454f981871e4909daaf"
     }
   },
   "notes": [
@@ -51,6 +65,6 @@
     "source": "DB Securities Open API",
     "endpoint": "/api/v1/quote/overseas-stock/chart/day",
     "adjusted_price_request": "InputOrgAdjPrc=1",
-    "latest_completed_session": "2026-07-13"
+    "latest_completed_session": "2026-07-14"
   }
 }

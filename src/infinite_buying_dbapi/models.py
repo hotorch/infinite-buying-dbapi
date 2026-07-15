@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field, is_dataclass, replace
+from dataclasses import asdict, dataclass, is_dataclass, replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from enum import StrEnum
@@ -13,6 +13,8 @@ SUPPORTED_SYMBOLS = {"TQQQ", "SOXL"}
 SUPPORTED_DIVISIONS = {20, 30, 40}
 LIVE_DIVISIONS = {20, 40}
 ZERO = Decimal("0")
+EPOCH_DATE = date(1970, 1, 1)
+EPOCH_DATETIME = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 class Mode(StrEnum):
@@ -23,8 +25,17 @@ class Mode(StrEnum):
 
 class Environment(StrEnum):
     PREVIEW = "preview"
-    PAPER = "paper"
     LIVE = "live"
+
+
+class AccountMode(StrEnum):
+    REAL = "real"
+
+
+class ProfileStatus(StrEnum):
+    OFF = "OFF"
+    ON = "ON"
+    LOCKED = "LOCKED"
 
 
 class Phase(StrEnum):
@@ -88,8 +99,8 @@ class StrategyProfile:
     capital: Decimal
     account_alias: str = "default"
     ruleset_version: str = RULESET_VERSION
-    status: str = "active"
-    effective_from: date = field(default_factory=date.today)
+    status: str = ProfileStatus.OFF.value
+    effective_from: date = EPOCH_DATE
 
     def __post_init__(self) -> None:
         symbol = self.symbol.upper()
@@ -102,6 +113,10 @@ class StrategyProfile:
             raise ValueError("capital must be positive")
         if self.ruleset_version != RULESET_VERSION:
             raise ValueError(f"unsupported ruleset: {self.ruleset_version}")
+        status = self.status.upper()
+        if status not in {item.value for item in ProfileStatus}:
+            raise ValueError("status must be OFF, ON, or LOCKED")
+        object.__setattr__(self, "status", status)
 
     @property
     def target_pct(self) -> Decimal:
@@ -109,7 +124,7 @@ class StrategyProfile:
 
     @property
     def live_eligible(self) -> bool:
-        return self.division_count in LIVE_DIVISIONS and self.status == "active"
+        return self.division_count in LIVE_DIVISIONS and self.status.upper() == ProfileStatus.ON.value
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,13 +220,17 @@ class FillEvent:
     requested_qty: int
     filled_qty: int
     fill_price: Decimal
-    filled_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    filled_at: datetime = EPOCH_DATETIME
+    fee: Decimal = ZERO
+    settlement_status: str = "settled"
 
     def __post_init__(self) -> None:
         if not 0 < self.filled_qty <= self.requested_qty:
             raise ValueError("filled_qty must be between one and requested_qty")
         if self.fill_price <= ZERO:
             raise ValueError("fill_price must be positive")
+        if self.fee < ZERO:
+            raise ValueError("fill fee cannot be negative")
 
     @property
     def fill_ratio(self) -> Decimal:
@@ -226,9 +245,46 @@ class BrokerOrder:
     requested_qty: int
     filled_qty: int = 0
     remaining_qty: int = 0
-    submitted_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    submitted_at: datetime = EPOCH_DATETIME
     last_checked_at: datetime | None = None
     raw_response_hash: str = ""
+    account_alias: str = "default"
+    order_date: date = EPOCH_DATE
+
+    @property
+    def broker_key(self) -> str:
+        return f"{self.account_alias}:{self.order_date.isoformat()}:{self.broker_order_no}"
+
+
+@dataclass(frozen=True, slots=True)
+class WeatherSnapshot:
+    symbol: str
+    signal_symbol: str
+    benchmark_symbol: str
+    session_date: date
+    signal_date: date
+    regime: str
+    weather_state: str
+    duration: int
+    momentum_3m: Decimal | None
+    momentum_6m: Decimal | None
+    relative_strength: Decimal | None
+    distance_50: Decimal | None
+    dollar_volume: Decimal | None
+    reason_codes: tuple[str, ...]
+    score: Decimal = ZERO
+    sma50_rising_10d: bool = False
+    dollar_volume_multiple: Decimal | None = None
+    ruleset_version: str = "regime-weather-1"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "symbol", self.symbol.upper())
+        if self.symbol not in SUPPORTED_SYMBOLS:
+            raise ValueError(f"unsupported weather symbol: {self.symbol}")
+        if self.weather_state not in {"strong_green", "green", "yellow", "orange", "red", "early_thaw"}:
+            raise ValueError(f"unsupported weather state: {self.weather_state}")
+        if self.duration <= 0:
+            raise ValueError("weather duration must be positive")
 
 
 @dataclass(frozen=True, slots=True)
