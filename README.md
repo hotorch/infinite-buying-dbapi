@@ -7,6 +7,21 @@ DB증권 Open API를 이용해 `순수 무한매수 V4` 규칙을 계산하고, 
 > [!WARNING]
 > 이 프로그램은 투자 권유나 수익 보장 도구가 아닙니다. 레버리지 ETF는 큰 손실이 발생할 수 있습니다. `preview`로 계산을 확인하고 강사 실계좌 인수시험 증거가 등록되기 전에는 실주문이 자동으로 차단됩니다.
 
+## 현재 배포 상태
+
+| 항목 | 상태 |
+|---|---|
+| 프로그램 | `0.2.0` |
+| 전략 | `pure-v4-ruleset-1` — 변경 없음 |
+| 내장 날씨 | `regime-weather-1` — TQQQ/QQQ, SOXL/SMH, 공통 SPY |
+| 계좌 모드 | DB증권 `real` 전용. 로컬 paper·가상체결 제거 |
+| 새 프로필 | `OFF`, 비상정지 `ON` |
+| 실계좌 읽기 전용 | OAuth·잔고·보유·거래내역·5종목 시세/일봉 확인 |
+| 실주문 | 강사 계좌 1주 인수시험 증거가 등록될 때까지 fail-closed |
+| 일정·Slack | Hermes Gateway의 cron·Slack delivery가 소유 |
+
+Windows, macOS, Python 3.12와 대시보드 검사는 [GitHub Actions](https://github.com/hotorch/infinite-buying-dbapi/actions)에서 실행됩니다.
+
 ## 1. 이 프로그램이 하는 일
 
 - TQQQ 또는 SOXL의 순수 V4 매수·매도 가격과 수량을 같은 입력에서 항상 똑같이 계산합니다.
@@ -15,10 +30,12 @@ DB증권 Open API를 이용해 `순수 무한매수 V4` 규칙을 계산하고, 
 - 주문·체결·부분체결·취소를 SQLite에 기록하고 프로그램을 다시 시작해도 이어서 복구합니다.
 - 같은 명령을 반복해도 같은 주문이 중복 제출되지 않도록 막습니다.
 - 미국 휴장일, 서머타임, 조기폐장일을 미국 거래소 일정으로 계산합니다.
+- TQQQ/SOXL에 같은 `regime-weather-1` 날씨 엔진을 적용하고 회차·거래일차·자금 이벤트를 JSON으로 제공합니다.
+- Windows/macOS에서 `app dashboard start`로 백테스트·날씨·회차 대시보드를 실행합니다.
 
 다음 기능은 하지 않습니다.
 
-- 종목 추천, 시장 예측, Hermes/LLM 투자 판단
+- 종목 추천, 시장 예측, Hermes/LLM의 전략 가격·수량 변경
 - 손실을 막아주거나 수익을 보장하는 기능
 - 사용자가 승인하지 않은 전략 변경
 - 미확인 DB증권 기능을 추측해서 실주문하는 기능
@@ -44,6 +61,13 @@ DB증권 Open API를 이용해 `순수 무한매수 V4` 규칙을 계산하고, 
 4. 계좌별 APP_KEY와 APP_SECRET
 5. PowerShell
 6. Python 실행환경을 준비해 주는 `uv`
+
+### 돈이 필요한 시점
+
+- API 인증, 빈 잔고·보유·거래내역, 현재가·일봉 조회는 계좌 잔고가 0이어도 됩니다.
+- `preview`, 백테스트, 대시보드는 실제 돈을 사용하지 않습니다.
+- `automation readiness`, 프로필 `ON`, 1주 실계좌 인수시험에는 **결제완료된 주문가능 USD**가 필요합니다. 원화 입금만 된 상태나 결제 예정 금액은 사용할 수 없습니다.
+- 프로필 배정자금은 실제 계좌 총액과 결제완료 USD를 넘기지 않게 정하세요. 테스트 목적이라도 임의로 capability를 `확인됨` 처리하면 안 됩니다.
 
 DB증권 공식 신청 순서는 [OPEN API 이용절차 안내](https://openapi.dbsec.co.kr/howto-use)를 확인하세요.
 
@@ -103,10 +127,10 @@ DB증권에서 내려받은 다음 형식은 `.env` 예제가 아니라 **발급
 - `expire_date`: APP KEY·SECRET 만료일이며 24시간짜리 Access Token 만료일이 아님
 - 네 필드 모두를 OAuth 요청에 보내는 것은 아닙니다.
 
-다음 명령을 실행합니다.
+먼저 자격증명과 로컬 DB만 초기화합니다. 이 단계에서는 프로필을 만들거나 주문하지 않습니다.
 
 ```powershell
-uv run app setup --account-alias student-001 --save-api-credentials --credential-expire-date YYYYMMDD --tqqq-capital 10000 --soxl-capital 10000
+uv run app setup --account-alias student-001 --save-api-credentials --credential-expire-date YYYYMMDD
 ```
 
 화면에 아래 질문이 차례로 나옵니다.
@@ -147,7 +171,7 @@ IB_DBSEC_OAUTH_STYLE=form
 
 홈페이지 이용절차의 JSON 예시는 참고용 호환 방식으로만 남겨 둡니다. 프로그램은 토큰 발급 제한 때문에 두 형식을 자동으로 연속 재시도하지 않습니다. 자세한 내용은 [DB증권 API 신청·인증 매뉴얼](docs/manuals/02-dbsec-api-setup.md)을 읽으세요.
 
-## 6. 첫 전략 프로필 만들기
+## 6. 계좌를 조회하고 첫 프로필 만들기
 
 키 등록 후 다음 읽기 전용 명령으로 인증과 계좌·시세를 확인할 수 있습니다. 원본 JSON, 키, 토큰, 전체 계좌번호는 출력하지 않습니다.
 
@@ -160,13 +184,15 @@ uv run app dbsec current-price --symbol TQQQ
 uv run app dbsec daily-chart --symbol TQQQ --start 2026-07-01 --end 2026-07-13
 ```
 
-실제 로컬 프로필을 대조할 때만 `uv run app reconcile --profile p1 --json`을 사용합니다. 수량이 다르면 `LOCKED + RECONCILIATION_REQUIRED`로 전환되어 신규 주문이 차단됩니다.
+잔고가 0이면 `balance_rows=0`, `holdings=0`, `transactions=0`이 정상 결과입니다. 조회 단계에서는 입금하지 않아도 됩니다.
+
+실제 로컬 프로필을 만든 뒤 대조할 때만 `uv run app reconcile --profile tqqq --json`을 사용합니다. 수량이 다르면 `LOCKED + RECONCILIATION_REQUIRED`로 전환되어 신규 주문이 차단됩니다.
 공식 TR 제한값을 아직 설정하지 않은 읽기 전용 명령은 보수적으로 초당 1회만 호출합니다. live 대조와 주문에는 확인된 `IB_DBSEC_REQUESTS_PER_SECOND`가 계속 필요합니다.
 
-처음에는 TQQQ 40분할을 권장합니다.
+수업에서 정한 종목·분할수·실제 배정 USD에 맞춰 프로필을 하나씩 만듭니다. 같은 계좌에서 같은 종목을 여러 프로필이 소유할 수 없습니다.
 
 ```powershell
-uv run app profile create p1 --symbol TQQQ --division 40 --capital 10000
+uv run app profile create tqqq --symbol TQQQ --division 40 --capital 10000
 ```
 
 여기서 `--capital 10000`은 원화 1천만 원이 아니라 **미화 10,000달러**입니다.
@@ -185,12 +211,20 @@ uv run app profile create p1 --symbol TQQQ --division 40 --capital 10000
 uv run app profile list
 ```
 
+설치와 프로필 생성을 한 번에 하려면 5절의 `setup` 명령에 필요한 프로필 옵션만 추가할 수 있습니다. 아래 명령은 `tqqq`라는 OFF 프로필을 함께 만듭니다.
+
+```powershell
+uv run app setup --account-alias student-001 --save-api-credentials --credential-expire-date YYYYMMDD --tqqq-capital 10000 --tqqq-division 40
+```
+
+이 방법을 사용했다면 `profile create tqqq ...`를 다시 실행하지 마세요.
+
 ## 7. 주문 없이 첫 미리보기
 
 아래 명령은 DB증권에 주문하지 않습니다.
 
 ```powershell
-uv run app preview p1 --previous-close 100 --completed-closes 96,97,98,99,100
+uv run app preview tqqq --previous-close 100 --completed-closes 96,97,98,99,100
 ```
 
 결과의 주요 항목:
@@ -216,8 +250,8 @@ uv run app capability verify
 
 ```powershell
 uv run app weather update --symbol TQQQ --json
-uv run app automation readiness --profile p1
-uv run app automation status p1 --json
+uv run app automation readiness --profile tqqq
+uv run app automation status tqqq --json
 ```
 
 강사 실계좌에서는 [최소수량 실계좌 테스트베드 절차](docs/testbed-protocol.md)를 별도로 통과해야 합니다. 증거가 capability matrix에 등록되기 전에는 ON이 되지 않습니다.
@@ -241,12 +275,27 @@ Hermes 연결과 준비 점검은 [Hermes 자동화](docs/manuals/04-hermes-auto
 
 Hermes Gateway가 `live-runner`, `capital-watch`, `morning-report`를 소유합니다. 저장소는 Task Scheduler, Slack SDK, 웹훅 또는 토큰을 포함하지 않습니다.
 
+설치 가능한 Hermes skill은 [`hermes-skills/operate-infinite-buying`](hermes-skills/operate-infinite-buying/)에 있습니다. Hermes는 이 skill의 고정 CLI만 호출하며 코드·환경변수·SQLite를 직접 수정하지 않습니다.
+
 미국장 기준 시각 확인:
 
 ```powershell
 uv run app automation tick --all --quiet-when-idle
 uv run app report daily --session-date latest --json
 ```
+
+운영·대시보드 조회 명령:
+
+```powershell
+uv run app position status tqqq --json
+uv run app position cycles tqqq --json
+uv run app orders list --profile tqqq --json
+uv run app weather current --symbol TQQQ --json
+uv run app capital status
+uv run app dashboard start
+```
+
+`capital scan`은 DB증권 입출금·환전·결제내역 capability와 공식 응답 fixture가 확인되기 전까지 의도적으로 차단됩니다.
 
 ## 11. 문제가 생기면 가장 먼저 할 일
 
