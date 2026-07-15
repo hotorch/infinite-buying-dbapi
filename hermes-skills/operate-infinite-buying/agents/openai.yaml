@@ -1,4 +1,0 @@
-interface:
-  display_name: "Operate Infinite Buying"
-  short_description: "Safely operate Pure V4 through its fixed JSON CLI"
-  default_prompt: "Use $operate-infinite-buying to check readiness and operate TQQQ or SOXL safely."

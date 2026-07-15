@@ -10,7 +10,7 @@ uv run app automation readiness --profile tqqq
 
 `IB_DBSEC_ACCOUNT_MODE=real`이 기본이다. `IB_ENVIRONMENT`는 제거되었으며 존재하면 명시적 오류가 난다. APP KEY·SECRET·토큰은 OS keychain에만 둔다.
 
-Hermes cron 3개를 생성·검증한 뒤에만 다음을 실행한다.
+사용자가 별도 실습에서 Hermes 외부 실행환경 준비를 완료했다고 확인한 뒤에만 ON을 검토한다. 이 저장소는 외부 일정이나 메시징 설정을 정의하지 않는다.
 
 ```powershell
 uv run app automation on --profile tqqq --cron-verified
@@ -24,7 +24,7 @@ uv run app automation off --profile tqqq
 uv run app reconcile --profile tqqq --json
 ```
 
-Hermes용 안정적인 조회 명령:
+Hermes가 사용할 수 있는 안정적인 조회 명령:
 
 ```powershell
 uv run app position status tqqq --json
@@ -38,4 +38,4 @@ uv run app report daily --session-date latest --json
 
 UNKNOWN, 수량·현금 불일치, 비정상 출금 또는 데이터 오류가 있으면 재전송하지 않는다. SQLite를 직접 고치지 말고 `emergency-stop on`, 백업, 대사 순서로 처리한다.
 
-Hermes 설치·cron·Slack 계약은 [Hermes 핸드오프](hermes-handoff.md)를 따른다.
+Hermes에게는 무한매수 배경지식·CLI 사용법·상대경로만 담은 단일 문서 [Hermes 프로젝트 핸드오프](hermes-handoff.md)를 전달한다. skill, 일정, Slack, Gateway는 사용자가 별도 실습에서 구성한다.

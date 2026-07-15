@@ -5,7 +5,7 @@
 1. [설치](01-installation.md)
 2. [DB증권 Open API 신청과 인증](02-dbsec-api-setup.md)
 3. [첫 프로필과 미리보기](03-first-preview.md)
-4. [Hermes·Slack 자동화](04-hermes-automation.md)
+4. [Hermes 프로젝트 핸드오프](../hermes-handoff.md)
 5. [실주문 운영](05-live-operations.md)
 6. [문제 해결](06-troubleshooting.md)
 7. [보안·백업·수강생별 분리](07-security-and-backup.md)

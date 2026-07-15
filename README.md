@@ -18,7 +18,7 @@ DB증권 Open API를 이용해 `순수 무한매수 V4` 규칙을 계산하고, 
 | 새 프로필 | `OFF`, 비상정지 `ON` |
 | 실계좌 읽기 전용 | OAuth·잔고·보유·거래내역·5종목 시세/일봉 확인 |
 | 실주문 | 강사 계좌 1주 인수시험 증거가 등록될 때까지 fail-closed |
-| 일정·Slack | Hermes Gateway의 cron·Slack delivery가 소유 |
+| Hermes 연동 | 프로젝트 핸드오프는 `docs/hermes-handoff.md` 한 파일만 제공. 외부 연결은 실습에서 구성 |
 
 Windows, macOS, Python 3.12와 대시보드 검사는 [GitHub Actions](https://github.com/hotorch/infinite-buying-dbapi/actions)에서 실행됩니다.
 
@@ -264,18 +264,18 @@ uv run app automation status tqqq --json
 - 같은 종목 LOC 매도 후 LOC 매수 테스트 성공
 - 사용하는 모든 DB증권 TR의 공식 호출 제한 확인
 - 비상정지 해제
-- Hermes cron 3개 생성·검증
+- 사용자가 Hermes 외부 실행환경 준비 완료를 확인
 - DB증권 주문·체결·잔고와 로컬 상태 대조 성공
 - 최신 내장 날씨와 결제완료 USD 확인
 - 강사 실계좌 LOC/LIMIT/MOC·취소·부분체결·timeout 대사 증거
 
-Hermes 연결과 준비 점검은 [Hermes 자동화](docs/manuals/04-hermes-automation.md), 실제 운영은 [실주문 운영](docs/manuals/05-live-operations.md)을 참고하세요.
+Hermes에게 프로젝트를 설명할 때는 단일 문서인 [Hermes 프로젝트 핸드오프](docs/hermes-handoff.md)를 전달하세요. 실제 운영은 [실주문 운영](docs/manuals/05-live-operations.md)을 참고하세요.
 
-## 10. Hermes가 관리하는 매일 운영
+## 10. Hermes에게 프로젝트 알려주기
 
-Hermes Gateway가 `live-runner`, `capital-watch`, `morning-report`를 소유합니다. 저장소는 Task Scheduler, Slack SDK, 웹훅 또는 토큰을 포함하지 않습니다.
+Hermes는 먼저 [`docs/hermes-handoff.md`](docs/hermes-handoff.md) 한 파일을 읽어야 합니다. 이 문서에는 무한매수 배경지식, Pure V4 핵심 개념, 공개 CLI 사용법, 저장소 상대경로 지도가 들어 있습니다.
 
-설치 가능한 Hermes skill은 [`hermes-skills/operate-infinite-buying`](hermes-skills/operate-infinite-buying/)에 있습니다. Hermes는 이 skill의 고정 CLI만 호출하며 코드·환경변수·SQLite를 직접 수정하지 않습니다.
+이 저장소는 Hermes skill, 실행 wrapper, 일정, Slack, Gateway 설정을 제공하지 않습니다. Hermes가 필요한 skill과 외부 자동화는 사용자가 별도 실습에서 직접 구성합니다. 프로젝트를 조작할 때는 핸드오프에 적힌 상대경로와 `uv run app ...` 공개 CLI만 사용합니다.
 
 미국장 기준 시각 확인:
 
@@ -326,7 +326,7 @@ uv run app backup create backups/state-backup.sqlite3
 | [01. 설치](docs/manuals/01-installation.md) | 처음 설치하거나 PC를 바꿀 때 |
 | [02. DB증권 신청과 인증](docs/manuals/02-dbsec-api-setup.md) | APP_KEY·APP_SECRET·토큰이 궁금할 때 |
 | [03. 첫 미리보기](docs/manuals/03-first-preview.md) | 주문 없이 계산 결과를 확인할 때 |
-| [04. Hermes 자동화](docs/manuals/04-hermes-automation.md) | Slack·cron을 연결할 때 |
+| [04. Hermes 프로젝트 핸드오프](docs/hermes-handoff.md) | Hermes에게 무한매수 배경지식·사용법·상대경로를 전달할 때 |
 | [05. 실주문 운영](docs/manuals/05-live-operations.md) | 모든 출시 조건을 통과한 뒤 운영할 때 |
 | [06. 문제 해결](docs/manuals/06-troubleshooting.md) | 오류 메시지나 상태 불일치가 생겼을 때 |
 | [07. 보안·백업·수강생별 분리](docs/manuals/07-security-and-backup.md) | 키 보관, 백업, 진단보고서가 궁금할 때 |
