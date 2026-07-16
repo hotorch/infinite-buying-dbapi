@@ -205,14 +205,14 @@ def setup(
     account_alias: str = typer.Option("default"),
     save_access_token: bool = typer.Option(False, help="Prompt for and save a temporary access token in the OS keychain."),
     save_api_credentials: bool = typer.Option(False, help="Prompt for the app key and secret required for automatic OAuth renewal."),
-    import_env_credentials: bool = typer.Option(False, help="Import DB_APPKEY/DB_APPSECRET from .env into Windows Credential Manager."),
+    import_env_credentials: bool = typer.Option(False, help="Import DB_APPKEY/DB_APPSECRET from .env into the OS keychain."),
     credential_expire_date: str | None = typer.Option(None, help="DB-issued APP KEY expiry in YYYYMMDD format."),
     tqqq_capital: str | None = typer.Option(None, help="Create the default OFF TQQQ profile with this USD capital."),
     soxl_capital: str | None = typer.Option(None, help="Create the default OFF SOXL profile with this USD capital."),
     tqqq_division: int = typer.Option(40, min=20, max=40),
     soxl_division: int = typer.Option(40, min=20, max=40),
 ) -> None:
-    """Initialize the local database and optionally save a token securely."""
+    """Initialize the local database and optionally save credentials securely."""
     settings, store = _context()
     store.set_setting("account_alias", account_alias)
     store.set_setting("emergency_stop", "true")

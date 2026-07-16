@@ -1,5 +1,7 @@
 # 01. Windows 설치
 
+이 문서는 Windows용 순서입니다. macOS 사용자는 README의 macOS 안내에 따라 `uv`를 설치한 뒤 `uv sync --python 3.12`부터 같은 명령을 사용할 수 있습니다.
+
 ## 준비물
 
 - Windows 11
@@ -52,7 +54,7 @@ uv sync --python 3.12
 uv run app --help
 ```
 
-`setup`, `preview`, `profile`, `run`, `orders`, `live`, `backup` 등이 보이면 성공입니다.
+`setup`, `preview`, `profile`, `run`, `orders`, `automation`, `weather`, `position`, `backup` 등이 보이면 성공입니다. `live`와 `scheduler`는 0.2.0 명령이 아닙니다.
 
 ## 업데이트할 때
 
@@ -64,7 +66,7 @@ uv run app backup create backups/before-update.sqlite3
 uv sync --python 3.12
 ```
 
-전략 버전이 달라졌다면 자동으로 기존 프로필을 변경하지 말고 변경 안내와 마이그레이션 문서를 확인하세요.
+전략 버전이 달라졌다면 기존 프로필을 자동으로 바꾸지 말고 변경 안내와 마이그레이션 문서를 먼저 확인하세요. 현재 앱은 `0.2.0`, 전략은 `pure-v4-ruleset-1`입니다.
 
 ## 제거할 때
 

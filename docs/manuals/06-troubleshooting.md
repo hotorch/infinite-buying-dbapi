@@ -16,7 +16,7 @@ uv run app emergency-stop on
 2. DB증권 앱의 보유수량과 미체결 주문을 확인합니다.
 3. `uv run app orders list`와 비교합니다.
 4. 모르는 주문번호가 있으면 수동 주문 여부를 확인합니다.
-5. 원인을 해결한 뒤 `reconcile`을 다시 실행합니다.
+5. 원인을 해결한 뒤 `uv run app reconcile --profile PROFILE --json`을 실행합니다.
 
 ## `OPPOSING_LOC_NOT_VERIFIED`
 
@@ -50,11 +50,11 @@ HTTP 401·403·429 또는 5xx 오류가 나도 프로그램은 다른 OAuth 형�
 
 인증 실패가 아니라 요청한 해외주식 잔고 행이 없다는 DB증권 업무 응답입니다. 프로그램은 이를 빈 잔고로 처리합니다. DB증권 앱에 실제 해외주식이 있는데도 이 응답이 나오면 계좌·실계좌/모의계좌 키가 맞는지 확인하고 신규 주문을 중단하세요.
 
-`uv run app dbsec holdings`가 빈 목록이고 로컬 프로필 수량도 0이면 정상 빈 상태입니다. 로컬 수량이 0이 아니면 `uv run app reconcile PROFILE --environment live`가 `RECONCILIATION_REQUIRED`를 기록하며 신규 주문을 차단합니다.
+`uv run app dbsec holdings`가 빈 목록이고 로컬 프로필 수량도 0이면 정상 빈 상태입니다. 로컬 수량이 0이 아니면 `uv run app reconcile --profile PROFILE --json`으로 대사하세요. 불일치가 확인되면 `RECONCILIATION_REQUIRED`가 기록되고 신규 주문이 차단됩니다.
 
 ## 주문 결과가 불명확함
 
-네트워크 타임아웃 후 주문이 성공했을 수도 있습니다. 같은 주문을 다시 보내지 말고 체결·미체결 조회와 앱 주문번호를 먼저 확인하세요. 프로그램은 해당 의도를 `UNKNOWN`으로 남겨 자동 재주문을 막습니다.
+네트워크 타임아웃 후에도 주문은 성공했을 수 있습니다. 먼저 `uv run app emergency-stop on`으로 신규 주문을 막으세요. 같은 주문을 다시 보내지 말고 체결·미체결 조회와 앱 주문번호를 확인합니다. 프로그램은 해당 의도를 `UNKNOWN`으로 남겨 자동 재주문을 막습니다.
 
 ## `PROFILE_NOT_LIVE_ELIGIBLE`
 

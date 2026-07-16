@@ -1,37 +1,59 @@
-# DB Securities capability matrix
+# DB증권 기능 확인표
 
-Checked against the official service pages and the downloaded overseas-order
-workbook on 2026-07-12. Runtime evidence is stored in SQLite by
-`app capability verify`.
+마지막 문서·실증 확인일은 2026-07-12다. 공식 서비스 페이지와 해외주식 주문 문서를 기준으로 확인했다. 실제 실행 증거는 `app capability verify`가 SQLite에 기록한다.
 
-| Capability | Status | Evidence / required action |
+상태의 뜻:
+
+| 상태 | 뜻 |
+|---|---|
+| `확인됨` | 공식 문서 또는 요구된 실증까지 완료됨 |
+| `문서·CLI 구현 확인 / 실응답 미검증` | 문서와 코드는 있지만 실제 계좌 응답 증거가 부족함 |
+| `문서 확인됨 / 실증 필요` | 공식 문서에는 있지만 실제 호출하지 않음 |
+| `확인 필요` | 실주문에 사용하면 안 됨 |
+| `대체 설계 필요` | 현재 v1 설계로는 지원하지 않음 |
+
+## 기능별 상태
+
+| 기능 | 상태 | 쉬운 설명과 남은 일 |
 |---|---|---|
-| US stock/ETF order | 확인됨 | Overseas stock order API; overseas ETF service registration is required |
-| Test-account order | 확인됨 | Official order description |
-| Limit / LOC / MOC | 확인됨 | `AstkOrdprcPtnCode` 1 / 5 / 6 |
-| Correction / cancellation | 확인됨 | `OrdTrdTpCode` 1 / 2 with original order number |
-| Fill and unfilled inquiry | 문서·CLI 구현 확인 / 실응답 미검증 | `/api/v1/trading/overseas-stock/inquiry/transaction-history`; read-only CLI and pagination are implemented |
-| Holdings / margin | 확인됨 | `/api/v1/trading/overseas-stock/inquiry/balance-margin`; 2026-07-12 real-key read-only call reached HTTP 200, with `2679` meaning no rows |
-| Opposing LOC on one symbol | 확인 필요 | Must pass `docs/testbed-protocol.md` |
-| Buy while sell shares are reserved | 확인 필요 | Must pass testbed protocol |
-| OAuth issue / renewal | 확인됨 | 2026-07-12 real-key form OAuth returned HTTP 200 and `expires_in=86400`; one issuance request per minute; JSON remains explicit compatibility only |
-| OAuth revoke | 문서 확인됨 / 실증 필요 | `/oauth2/revoke` schema is implemented but was not called with the user's real token |
-| Orderable amount request schema | 확인됨 | `/api/v1/trading/overseas-stock/inquiry/able-orderqty`; `TrxTpCode`, symbol, price, currency code |
-| Current price / daily chart schema | 문서·CLI 구현 확인 / 실응답 미검증 | `/api/v1/quote/overseas-stock/inquiry/price` and `/api/v1/quote/overseas-stock/chart/day` |
-| Broker idempotency key | 확인 필요 | Not present in the order workbook; test and ask DB Securities |
-| Rate limits | 확인 필요 | Record every used TR limit, configure the lowest value, then mark verified; SQLite enforces a cross-process interval |
-| KRW settlement | 대체 설계 필요 | v1 live accounting is USD-only |
-| Early-close broker cutoff | 확인 필요 | `automation tick` uses XNYS close-minus-10-minutes; verify the broker cutoff before acceptance |
-| Real-account 1-share LOC / LIMIT / MOC | 확인 필요 | Record instructor-account request/response hashes and results before `live_order_tests_confirmed` |
-| Real-account correction / cancellation | 확인 필요 | Verify composite order identity and final re-query result |
-| Partial fill then cancellation | 확인 필요 | Verify executed quantity, remainder, average cost, cash, fee, and settlement state remain intact |
-| Timeout / network / HTTP 5xx reconciliation | 확인 필요 | Prove UNKNOWN is never resent and next-day inquiry resolves or remains locked |
-| Cash deposit / withdrawal / FX / settlement ledger | 확인 필요 | No verified DB Securities endpoint/fields; `capital scan` remains fail-closed |
+| 미국 주식·ETF 주문 | 확인됨 | 해외주식 주문 API를 사용한다. 해외 ETF 거래 신청은 별도로 필요하다. |
+| 테스트 계좌 주문 | 확인됨 | 공식 주문 문서에서 지원을 확인했다. |
+| LIMIT / LOC / MOC | 확인됨 | `AstkOrdprcPtnCode` 1 / 5 / 6을 사용한다. |
+| 정정·취소 | 확인됨 | 원주문번호와 `OrdTrdTpCode` 1 / 2를 사용한다. |
+| 체결·미체결 조회 | 문서·CLI 구현 확인 / 실응답 미검증 | transaction-history 조회와 pagination 코드는 있지만 실제 응답 증거가 더 필요하다. |
+| 보유·증거금 | 확인됨 | 2026-07-12 실계좌 키로 HTTP 200을 확인했다. `2679`는 조회 행이 없다는 뜻이다. |
+| 같은 종목의 반대 방향 LOC | 확인 필요 | `docs/testbed-protocol.md`를 통과해야 한다. |
+| 매도수량 예약 중 매수 | 확인 필요 | 테스트베드에서 실제 동작을 확인해야 한다. |
+| OAuth 발급·갱신 | 확인됨 | 2026-07-12 form 방식으로 HTTP 200과 `expires_in=86400`을 확인했다. 발급은 1분에 1회만 시도한다. JSON 방식은 명시적 호환용이다. |
+| OAuth 폐기 | 문서 확인됨 / 실증 필요 | `/oauth2/revoke` 코드는 있지만 사용자 실토큰으로 호출하지 않았다. |
+| 주문가능금액 요청 형식 | 확인됨 | able-orderqty의 거래구분, 종목, 가격, 통화 필드를 확인했다. |
+| 현재가·일봉 요청 형식 | 문서·CLI 구현 확인 / 실응답 미검증 | price와 chart/day 조회 코드는 있지만 실제 응답 증거가 더 필요하다. |
+| 브로커 idempotency key | 확인 필요 | 주문 문서에서 찾지 못했다. DB증권 확인과 시험이 필요하다. |
+| 호출 제한 | 확인 필요 | 사용하는 모든 TR의 공식 제한을 기록하고 가장 낮은 값을 설정해야 한다. |
+| 원화 결제 | 대체 설계 필요 | v1 실주문 회계는 결제완료 USD만 지원한다. |
+| 조기폐장 주문 마감 | 확인 필요 | 앱은 XNYS 종가 10분 전을 사용한다. DB증권 마감시각을 확인해야 한다. |
+| 실계좌 1주 LOC / LIMIT / MOC | 확인 필요 | 강사 계좌의 요청·응답 해시와 결과를 기록해야 한다. |
+| 실계좌 정정·취소 | 확인 필요 | 복합 주문 식별자와 최종 재조회 결과를 확인해야 한다. |
+| 부분체결 후 취소 | 확인 필요 | 체결수량, 잔량, 평단, 현금, 수수료, 결제상태가 보존되는지 확인해야 한다. |
+| timeout·네트워크·HTTP 5xx 대사 | 확인 필요 | UNKNOWN을 재전송하지 않고 다음날 조회로 해결되거나 계속 잠기는지 증명해야 한다. |
+| 입출금·환전·결제 원장 | 확인 필요 | 확인된 endpoint와 필드가 없다. `capital scan`은 계속 차단한다. |
 
-`supports_opposing_loc` must equal `확인됨` before installation live enablement.
-If the test fails, automatic live orders remain disabled; the strategy is not
-silently modified.
+## 실주문을 열기 위한 추가 조건
 
-V2 additionally requires all five real-account acceptance capabilities stored
-by `app capability verify --live-order-tests-confirmed --evidence ...` to be
-`확인됨`. Never set that flag from documentation review alone.
+`supports_opposing_loc`가 `확인됨`이 아니면 실주문을 열 수 없다. 시험이 실패해도 전략 규칙을 임의로 바꾸지 않는다.
+
+0.2.0은 다음 강사 실계좌 인수시험 증거도 모두 요구한다.
+
+- LOC/LIMIT/MOC 최소수량 주문
+- 정정·취소
+- 부분체결
+- timeout 후 대사
+- 최종 계좌 대사
+
+모든 시험을 통과하고 redacted 증거가 검토된 뒤에만 다음 옵션을 사용할 수 있다.
+
+```powershell
+uv run app capability verify --opposing-loc-confirmed --rate-limits-confirmed --live-order-tests-confirmed --evidence "redacted evidence path, account alias, date"
+```
+
+문서만 읽고 `--live-order-tests-confirmed`를 설정하면 안 된다.

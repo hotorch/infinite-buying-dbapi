@@ -1,6 +1,6 @@
 # Pure Infinite Buying V4 + DB Securities
 
-**Pure Infinite Buying V4 + DB Securities** is a deterministic Windows CLI (Python 3.12) that computes the `순수 무한매수 V4` strategy for TQQQ/SOXL and safely prepares, records, and reconciles orders through the DB Securities (DB증권) Open API. Real orders are fail-closed behind multiple gates. Package `infinite_buying_dbapi`; CLI entry `app` (`uv run app ...`); app version 0.1.0; strategy version `pure-v4-ruleset-1`.
+**Pure Infinite Buying V4 + DB Securities** is a deterministic Windows/macOS CLI (Python 3.12) for the `순수 무한매수 V4` strategy on TQQQ/SOXL. It prepares, records, and reconciles DB Securities (DB증권) orders. Real orders fail closed unless every safety gate passes. Package `infinite_buying_dbapi`; CLI entry `app` (`uv run app ...`); app version `0.2.0`; strategy version `pure-v4-ruleset-1`; weather version `regime-weather-1`.
 
 ## Prime directives (safety-critical)
 
@@ -21,7 +21,7 @@ Source — `src/infinite_buying_dbapi/`:
 | `src/infinite_buying_dbapi/models.py` | Immutable domain contracts & pure types; constants `RULESET_VERSION`, `SUPPORTED_SYMBOLS={TQQQ,SOXL}`, `SUPPORTED_DIVISIONS={20,30,40}`. |
 | `src/infinite_buying_dbapi/strategy.py` | Pure V4 transitions (no I/O). |
 | `src/infinite_buying_dbapi/store.py` | SQLite migrations, optimistic state locking, outbox, fill ledger, audit log. |
-| `src/infinite_buying_dbapi/broker.py` | Preview / paper / DB Securities broker boundaries. |
+| `src/infinite_buying_dbapi/broker.py` | DB Securities inquiry/order boundary and sanitized broker errors. |
 | `src/infinite_buying_dbapi/auth.py` | DB Securities OAuth token issue + cache. |
 | `src/infinite_buying_dbapi/execution.py` | Holdings/notional preflight checks and live gates. |
 | `src/infinite_buying_dbapi/reconciliation.py` | Broker-vs-local compare; sets `reconciliation_required` on mismatch. |
@@ -50,21 +50,22 @@ Docs — read the relevant one before changing related code:
 - Python ≥3.12, `uv`-managed. Install deps with `uv sync --python 3.12` (add `--extra dev` for tests).
 - Lint: ruff, select `E4,E7,E9,F,I`, line-length 160, target py312.
 - Tests: pytest; coverage source `infinite_buying_dbapi`, `fail_under = 80`; golden vectors in `tests/golden/`.
-- Windows quirks, Korean/English reply mirroring, and Karpathy coding principles live in `~/.claude/CLAUDE.md` and apply here — don't restate them.
+- Platform quirks, Korean/English reply mirroring, and Karpathy coding principles live in `~/.claude/CLAUDE.md` and apply here — don't restate them.
 
 ## Capability boundaries
 
 - **What the system does NOT do** (recommend tickers, predict markets, make LLM/Hermes trade decisions, guarantee/limit losses, change strategy without approval, invent unverified broker behavior) → see `README.md` §1.
 - **Verified vs unverified DB Securities capabilities** → `docs/dbsec-capability-matrix.md`. Do not code a real-order path on a `확인 필요` capability.
-- **Hermes/LLM is data-only in v1.** Advisory proposals are stored rejected-by-default and cannot mutate strategy state or broker payloads.
-- **CLI surface:** `setup`, `profile`, `preview`, `capability verify`, `run sell-phase|buy-phase`, `reconcile`, `orders`, `live`, `emergency-stop`, `backup`, `scheduler`, `dbsec` (read-only), `diagnostics`.
+- **Hermes/LLM advice is data-only.** Advisory proposals are rejected by default and cannot change strategy state, prices, quantities, `T`, or broker payloads. Hermes is read-only by default. It may run an exact state-changing CLI command only when the user explicitly authorizes it. A recurring `automation tick` is allowed only when the user separately configures that fixed schedule and explicitly enables the target profile; Hermes never turns its own market opinion into an order.
+- **Weather is reporting data, not a strategy input.** It may explain the current regime and appear in reports, but it does not select a profile, allocate capital, or change a V4 order.
+- **CLI surface:** `setup`, `profile`, `preview`, `capability verify`, `run sell-phase|buy-phase`, `reconcile`, `orders`, `emergency-stop`, `backup`, `dbsec` (read-only), `automation`, `capital`, `weather`, `position`, `report`, `dashboard`, `replay`/`backtest`, `diagnostics`.
 
 ## Lessons learned / guardrails
 
 - **OAuth style.** Two official DB Securities docs disagree. Verified default `IB_DBSEC_OAUTH_STYLE=form` (`x-www-form-urlencoded`; fields `appkey`, `appsecretkey`, `grant_type=client_credentials`, `scope=oob`). `json` is explicit compatibility only; never auto-retry the other style (issuance limited to 1/min).
 - **Balance code `2679`** = "no rows" → normalize to empty holdings/transactions. Every other non-`00000` code stays a fail-closed error (never silently treat as an empty account).
 - **Credential bundle ≠ app `.env`.** DB-issued `appkey`/`appsecret`/`env`/`expire_date` differ from the app schema. Only key+secret go to Credential Manager; `expire_date` is APP-KEY expiry (not token expiry); `DB_ENV=real` is metadata, not the app's `IB_ENVIRONMENT`.
-- **Accounting limits.** KRW settlement is not live-eligible in v1 (USD-only accounting). Division 30 is experimental (preview/paper only).
+- **Accounting limits.** KRW settlement is not live-eligible in v1 (USD-only accounting). Division 30 is experimental (preview/backtest only).
 
 ## Commands
 

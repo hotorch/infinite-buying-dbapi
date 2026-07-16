@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Updated the Hermes handoff, README, agent guidance, and beginner manuals to match the 0.2.0 CLI and safety contract.
+- Clarified that weather is reporting-only, Hermes is read-only by default, `automation tick` can place real orders, and UNKNOWN handling starts with the emergency stop.
+
 ## 0.2.0 - 2026-07-15
 
 - Replaced local paper, daily approvals, Task Scheduler, and repository Slack delivery with OFF/ON/LOCKED profiles and a Hermes-owned JSON automation contract.

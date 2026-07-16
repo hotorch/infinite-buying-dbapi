@@ -16,7 +16,7 @@ DB증권 Open API를 이용해 `순수 무한매수 V4` 규칙을 계산하고, 
 | 내장 날씨 | `regime-weather-1` — TQQQ/QQQ, SOXL/SMH, 공통 SPY |
 | 계좌 모드 | DB증권 `real` 전용. 로컬 paper·가상체결 제거 |
 | 새 프로필 | `OFF`, 비상정지 `ON` |
-| 실계좌 읽기 전용 | OAuth·잔고·보유·거래내역·5종목 시세/일봉 확인 |
+| 실계좌 읽기 전용 | OAuth·빈 잔고 실응답 확인. 거래내역·5종목 시세/일봉은 문서와 CLI 구현 완료, 실응답 추가 확인 필요 |
 | 실주문 | 강사 계좌 1주 인수시험 증거가 등록될 때까지 fail-closed |
 | Hermes 연동 | 프로젝트 핸드오프는 `docs/hermes-handoff.md` 한 파일만 제공. 외부 연결은 실습에서 구성 |
 
@@ -30,12 +30,13 @@ Windows, macOS, Python 3.12와 대시보드 검사는 [GitHub Actions](https://g
 - 주문·체결·부분체결·취소를 SQLite에 기록하고 프로그램을 다시 시작해도 이어서 복구합니다.
 - 같은 명령을 반복해도 같은 주문이 중복 제출되지 않도록 막습니다.
 - 미국 휴장일, 서머타임, 조기폐장일을 미국 거래소 일정으로 계산합니다.
-- TQQQ/SOXL에 같은 `regime-weather-1` 날씨 엔진을 적용하고 회차·거래일차·자금 이벤트를 JSON으로 제공합니다.
+- TQQQ/SOXL에 `regime-weather-1` 날씨 엔진을 적용하고 회차·거래일차·자금 이벤트를 보여줍니다. 날씨는 설명과 보고에만 쓰며 주문이나 자금 배분을 바꾸지 않습니다.
 - Windows/macOS에서 `app dashboard start`로 백테스트·날씨·회차 대시보드를 실행합니다.
 
 다음 기능은 하지 않습니다.
 
-- 종목 추천, 시장 예측, Hermes/LLM의 전략 가격·수량 변경
+- 종목 추천, 시장 예측, Hermes/LLM의 전략 가격·수량·`T` 변경
+- 날씨나 LLM 의견을 이용한 자동 자금 배분
 - 손실을 막아주거나 수익을 보장하는 기능
 - 사용자가 승인하지 않은 전략 변경
 - 미확인 DB증권 기능을 추측해서 실주문하는 기능
@@ -59,7 +60,7 @@ Windows, macOS, Python 3.12와 대시보드 검사는 [GitHub Actions](https://g
 2. DB증권 계좌와 해외주식·해외 ETF 거래 신청
 3. DB증권 Open API 사용 신청
 4. 계좌별 APP_KEY와 APP_SECRET
-5. PowerShell
+5. Windows는 PowerShell, macOS는 Terminal
 6. Python 실행환경을 준비해 주는 `uv`
 
 ### 돈이 필요한 시점
@@ -82,6 +83,8 @@ DB증권 공식 신청 순서는 [OPEN API 이용절차 안내](https://openapi.
 > APP_KEY와 APP_SECRET을 README, `.env`, 이메일, 메신저, 화면 캡처, GitHub, AI 채팅에 붙여 넣지 마세요. 이 프로그램은 Windows Credential Manager 또는 macOS Keychain에 저장합니다.
 
 ## 4. 가장 쉬운 설치 방법
+
+아래 첫 예시는 Windows용입니다. macOS에서는 [공식 uv 설치 안내](https://docs.astral.sh/uv/getting-started/installation/)에 따라 `uv`를 설치한 뒤 Terminal에서 프로젝트 폴더로 이동하세요. 그다음 `uv sync`와 `uv run app --help`는 두 운영체제에서 같습니다.
 
 PowerShell을 열고 프로젝트 폴더로 이동합니다.
 
@@ -187,7 +190,7 @@ uv run app dbsec daily-chart --symbol TQQQ --start 2026-07-01 --end 2026-07-13
 잔고가 0이면 `balance_rows=0`, `holdings=0`, `transactions=0`이 정상 결과입니다. 조회 단계에서는 입금하지 않아도 됩니다.
 
 실제 로컬 프로필을 만든 뒤 대조할 때만 `uv run app reconcile --profile tqqq --json`을 사용합니다. 수량이 다르면 `LOCKED + RECONCILIATION_REQUIRED`로 전환되어 신규 주문이 차단됩니다.
-공식 TR 제한값을 아직 설정하지 않은 읽기 전용 명령은 보수적으로 초당 1회만 호출합니다. live 대조와 주문에는 확인된 `IB_DBSEC_REQUESTS_PER_SECOND`가 계속 필요합니다.
+공식 TR 제한값을 아직 설정하지 않은 읽기 전용 명령은 보수적으로 초당 1회만 호출합니다. 실계좌 대조와 주문에는 공식 근거로 확인한 `IB_DBSEC_REQUESTS_PER_SECOND`가 필요합니다.
 
 수업에서 정한 종목·분할수·실제 배정 USD에 맞춰 프로필을 하나씩 만듭니다. 같은 계좌에서 같은 종목을 여러 프로필이 소유할 수 없습니다.
 
@@ -258,7 +261,7 @@ uv run app automation status tqqq --json
 
 ## 9. 실주문이 쉽게 열리지 않는 이유
 
-아래 조건 중 하나라도 빠지면 `live` 주문은 거부됩니다.
+아래 조건 중 하나라도 빠지면 실주문은 거부됩니다.
 
 - TQQQ 또는 SOXL의 20/40분할 프로필
 - 같은 종목 LOC 매도 후 LOC 매수 테스트 성공
@@ -273,20 +276,17 @@ Hermes에게 프로젝트를 설명할 때는 단일 문서인 [Hermes 프로젝
 
 ## 10. Hermes에게 프로젝트 알려주기
 
-Hermes는 먼저 [`docs/hermes-handoff.md`](docs/hermes-handoff.md) 한 파일을 읽어야 합니다. 이 문서에는 무한매수 배경지식, Pure V4 핵심 개념, 공개 CLI 사용법, 저장소 상대경로 지도가 들어 있습니다.
+Hermes는 먼저 [`docs/hermes-handoff.md`](docs/hermes-handoff.md)를 읽어야 합니다. 여기에는 V4의 사전 맥락, 핵심 용어, 정상·리버스 흐름, 부분체결과 `T`, 숙지 체크리스트, 안전한 CLI 사용법, 장애 대응 순서가 쉬운 말로 정리되어 있습니다.
 
-이 저장소는 Hermes skill, 실행 wrapper, 일정, Slack, Gateway 설정을 제공하지 않습니다. Hermes가 필요한 skill과 외부 자동화는 사용자가 별도 실습에서 직접 구성합니다. 프로젝트를 조작할 때는 핸드오프에 적힌 상대경로와 `uv run app ...` 공개 CLI만 사용합니다.
+Hermes는 기본적으로 조회와 설명만 합니다. Hermes의 시장 의견은 주문 가격·수량·`T`·자금 배분을 바꿀 수 없습니다. 상태 변경 명령은 사용자가 정확한 명령과 대상을 명시한 경우에만 실행할 수 있습니다. 반복 `automation tick`은 사용자가 고정 일정을 별도로 구성하고 대상 프로필을 명시적으로 ON으로 만든 경우에만 허용됩니다.
 
-미국장 기준 시각 확인:
+이 저장소는 Hermes skill, 실행 wrapper, 일정, Slack, Gateway 설정을 제공하지 않습니다. 외부 자동화는 사용자가 별도로 구성하며, 프로젝트 조작에는 핸드오프에 적힌 `uv run app ...` 공개 CLI만 사용합니다.
+
+안전한 조회 명령:
 
 ```powershell
-uv run app automation tick --all --quiet-when-idle
+uv run app automation status --json
 uv run app report daily --session-date latest --json
-```
-
-운영·대시보드 조회 명령:
-
-```powershell
 uv run app position status tqqq --json
 uv run app position cycles tqqq --json
 uv run app orders list --profile tqqq --json
@@ -294,6 +294,9 @@ uv run app weather current --symbol TQQQ --json
 uv run app capital status
 uv run app dashboard start
 ```
+
+> [!CAUTION]
+> `automation tick`은 시각 확인 명령이 아닙니다. ON 프로필에서 실제 주문을 실행할 수 있습니다. `automation on`, `automation off`, `automation tick`, `reconcile`, `capital apply`, `emergency-stop on/off`도 상태나 실계좌에 영향을 줄 수 있으므로 핸드오프의 권한 규칙을 먼저 확인하세요.
 
 `capital scan`은 DB증권 입출금·환전·결제내역 capability와 공식 응답 fixture가 확인되기 전까지 의도적으로 차단됩니다.
 
@@ -312,7 +315,7 @@ uv run app backup create backups/state-backup.sqlite3
 ```
 
 - 주문 결과가 불명확하면 같은 주문을 다시 보내지 마세요.
-- `RECONCILIATION_REQUIRED`가 나오면 새 주문을 중단하고 DB증권 앱의 잔고·미체결 주문과 비교하세요.
+- `UNKNOWN`, `LOCKED`, `RECONCILIATION_REQUIRED`가 나오면 새 주문을 중단하고 DB증권 앱의 잔고·미체결 주문과 비교하세요.
 - SQLite 파일을 엑셀이나 DB 편집기로 직접 고치지 마세요.
 - 진단보고서는 `--redacted` 옵션을 유지한 상태로만 전달하세요.
 

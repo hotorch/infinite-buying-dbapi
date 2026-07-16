@@ -5,8 +5,9 @@
 - pure core: `models.py`, `strategy.py`; ruleset `pure-v4-ruleset-1` 불변
 - broker/order safety: `broker.py`, `execution.py`, `reconciliation.py`
 - SQLite v2: 복합 주문 식별자, outbox/fill, 회차·세션, 날씨, 자금 이벤트, 자동화 claim
-- embedded weather: `weather.py`, ruleset `regime-weather-1`; 전략 입력으로 사용 금지
-- operator API: `cli.py` 공통 JSON envelope; Hermes 외 일정/Slack 구현 금지
+- embedded weather: `weather.py`, ruleset `regime-weather-1`; 전략 입력과 자금 배분 입력으로 사용 금지
+- operator API: `cli.py`; `--json`을 지원하는 V2 운영·조회 명령은 공통 JSON envelope 사용. `preview`와 최소 노출 `dbsec` 텍스트 출력은 예외
+- Hermes: 기본 조회 전용. LLM 의견은 전략 상태나 broker payload를 바꿀 수 없고, 외부 일정/Slack은 저장소에서 구현하지 않음
 
 ## 상태 전이
 

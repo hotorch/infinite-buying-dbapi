@@ -59,7 +59,7 @@ uv run app setup --account-alias student-001 --save-api-credentials
 uv run app setup --account-alias student-001 --import-env-credentials
 ```
 
-프로그램은 `DB_ENV=real`과 `DB_EXPIRE_DATE=YYYYMMDD`를 검증하고 APP KEY·SECRET만 Windows 자격 증명 관리자에 저장합니다. 성공 후 `.env`의 `DB_APPKEY`, `DB_APPSECRET` 줄을 삭제하세요.
+프로그램은 `DB_ENV=real`과 `DB_EXPIRE_DATE=YYYYMMDD`를 검증하고 APP KEY·SECRET만 OS keychain에 저장합니다. Windows에서는 자격 증명 관리자, macOS에서는 Keychain을 사용합니다. 성공 후 `.env`의 `DB_APPKEY`, `DB_APPSECRET` 줄을 삭제하세요.
 
 ## DB증권 문서의 OAuth 형식 차이
 
@@ -107,7 +107,7 @@ IB_DBSEC_OAUTH_STYLE=json
 - 만료 5분 이상 남은 토큰은 재사용합니다.
 - 만료가 가까우면 APP_KEY와 APP_SECRET으로 새 토큰을 발급합니다.
 - 토큰 발급 요청은 계좌별 최소 60초 간격을 SQLite에서 강제합니다.
-- 키·토큰·만료시각은 Windows 자격 증명 관리자에 보관합니다.
+- 키·토큰·만료시각은 OS keychain에 보관합니다.
 - 토큰 응답의 `access_token/expires_in`과 다운로드 명세의 `token/expire_in`을 모두 읽을 수 있습니다.
 
 등록 상태와 읽기 전용 연결 확인:

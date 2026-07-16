@@ -4,7 +4,7 @@
 
 프로필은 `어느 계좌 별칭에서 어떤 종목을 몇 분할, 얼마의 자본으로 운용할지` 저장한 설정입니다.
 
-처음에는 TQQQ 40분할을 권장합니다.
+종목과 분할수는 프로그램이 추천하지 않습니다. 수업이나 사용자가 정한 값으로 만드세요. 아래는 TQQQ 40분할 연습 예시입니다.
 
 ```powershell
 uv run app profile create p1 --symbol TQQQ --division 40 --capital 10000
@@ -27,7 +27,7 @@ uv run app profile list
 uv run app preview p1 --previous-close 100 --completed-closes 96,97,98,99,100
 ```
 
-예시 값은 연습용입니다. 실제 운용에서는 DB증권 일봉 조회값을 사용합니다.
+예시 값은 연습용입니다. `preview`는 입력값을 자동으로 검증된 시세로 바꿔 주지 않으므로 실제 운용에서는 완료된 DB증권 일봉 값을 확인해 넣습니다.
 
 ## 결과를 읽는 법
 
