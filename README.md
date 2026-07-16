@@ -18,9 +18,9 @@ DB증권 Open API를 이용해 `순수 무한매수 V4` 규칙을 계산하고, 
 | 새 프로필 | `OFF`, 비상정지 `ON` |
 | 실계좌 읽기 전용 | OAuth·빈 잔고 실응답 확인. 거래내역·5종목 시세/일봉은 문서와 CLI 구현 완료, 실응답 추가 확인 필요 |
 | 실주문 | 강사 계좌 1주 인수시험 증거가 등록될 때까지 fail-closed |
-| Hermes 연동 | 프로젝트 핸드오프는 `docs/hermes-handoff.md` 한 파일만 제공. 외부 연결은 실습에서 구성 |
+| Hermes 연동 | 저장소 안의 단일 진입 문서는 `docs/hermes-handoff.md`. 외부 연결은 실습에서 구성 |
 
-Windows, macOS, Python 3.12와 대시보드 검사는 [GitHub Actions](https://github.com/hotorch/infinite-buying-dbapi/actions)에서 실행됩니다.
+Python 3.12 검사는 Windows와 macOS에서, 대시보드 검사는 Windows에서 [GitHub Actions](https://github.com/hotorch/infinite-buying-dbapi/actions)로 실행됩니다.
 
 ## 1. 이 프로그램이 하는 일
 
@@ -49,10 +49,16 @@ Windows, macOS, Python 3.12와 대시보드 검사는 [GitHub Actions](https://g
 | APP_SECRET | APP_KEY와 짝을 이루는 비밀번호. 누구에게도 보여주면 안 됨 |
 | Access Token | APP_KEY와 APP_SECRET으로 발급받는 24시간짜리 임시 출입증 |
 | preview | 주문 계산 결과만 보여주는 기본 모드. DB증권 주문 없음 |
+| fail-closed | 안전 조건이 하나라도 불확실하면 주문을 허용하지 않는 방식 |
+| capability | DB증권 기능이 공식 문서나 실계좌 시험으로 확인됐는지 나타내는 안전 근거 |
+| readiness | 프로필을 ON으로 만들기 전에 모든 안전 조건을 모아 검사한 결과 |
 | OFF / ON / LOCKED | 신규 주문 차단 / 자동실행 허용 / 기계적 불확실성으로 잠김 |
 | LOC | 지정한 조건을 만족하면 정규장 종가로 체결시키는 주문 |
 | T | V4 전략의 진행 정도를 나타내는 값 |
 | 사이클 | 첫 매수부터 해당 보유 흐름이 끝날 때까지의 한 묶음 |
+| intent / outbox | 계산된 주문 계획 / 중복 제출을 막기 위해 그 계획을 보관하는 로컬 기록 |
+| reconciliation(대사) | DB증권의 실제 보유·주문과 로컬 기록이 같은지 비교하는 절차 |
+| fixture | 비밀값을 제거하고 테스트용으로 고정해 둔 API 응답 예시 |
 
 ## 3. 시작 전에 준비할 것
 
@@ -89,8 +95,10 @@ DB증권 공식 신청 순서는 [OPEN API 이용절차 안내](https://openapi.
 PowerShell을 열고 프로젝트 폴더로 이동합니다.
 
 ```powershell
-cd C:\Users\hoyoung\Desktop\infinite-buying-dbapi
+cd C:\Users\student\Desktop\infinite-buying-dbapi
 ```
+
+`student`를 포함한 경로 전체를 자신의 실제 프로젝트 위치로 바꾸세요. 탐색기에서 프로젝트 폴더를 연 뒤 주소 표시줄의 경로를 복사해도 됩니다.
 
 `uv`가 없다면 먼저 설치합니다. 설치가 어려우면 강사에게 `uv` 설치를 요청하세요.
 
@@ -272,11 +280,11 @@ uv run app automation status tqqq --json
 - 최신 내장 날씨와 결제완료 USD 확인
 - 강사 실계좌 LOC/LIMIT/MOC·취소·부분체결·timeout 대사 증거
 
-Hermes에게 프로젝트를 설명할 때는 단일 문서인 [Hermes 프로젝트 핸드오프](docs/hermes-handoff.md)를 전달하세요. 실제 운영은 [실주문 운영](docs/manuals/05-live-operations.md)을 참고하세요.
+Hermes에게 프로젝트를 설명할 때는 [Hermes 프로젝트 핸드오프](docs/hermes-handoff.md)를 첫 진입 문서로 지정하세요. 저장소에 접근할 수 있는 Hermes는 `AGENTS.md`와 핸드오프가 가리키는 원문도 함께 읽어야 합니다. 실제 운영은 [실주문 운영](docs/manuals/05-live-operations.md)을 참고하세요.
 
 ## 10. Hermes에게 프로젝트 알려주기
 
-Hermes는 먼저 [`docs/hermes-handoff.md`](docs/hermes-handoff.md)를 읽어야 합니다. 여기에는 V4의 사전 맥락, 핵심 용어, 정상·리버스 흐름, 부분체결과 `T`, 숙지 체크리스트, 안전한 CLI 사용법, 장애 대응 순서가 쉬운 말로 정리되어 있습니다.
+Hermes는 저장소 루트의 `AGENTS.md`를 확인한 뒤 [`docs/hermes-handoff.md`](docs/hermes-handoff.md)를 읽어야 합니다. 핸드오프는 V4의 사전 맥락, 핵심 용어, 정상·리버스 흐름, 부분체결과 `T`, 숙지 체크리스트, 안전한 CLI 사용법, 장애 대응 순서를 연결하는 단일 진입 문서입니다. 파일 하나만 저장소 밖으로 복사한 경우에는 원문과 코드를 대조할 수 없으므로 상태 변경이나 실계좌 명령을 실행하면 안 됩니다.
 
 Hermes는 기본적으로 조회와 설명만 합니다. Hermes의 시장 의견은 주문 가격·수량·`T`·자금 배분을 바꿀 수 없습니다. 상태 변경 명령은 사용자가 정확한 명령과 대상을 명시한 경우에만 실행할 수 있습니다. 반복 `automation tick`은 사용자가 고정 일정을 별도로 구성하고 대상 프로필을 명시적으로 ON으로 만든 경우에만 허용됩니다.
 
@@ -292,11 +300,25 @@ uv run app position cycles tqqq --json
 uv run app orders list --profile tqqq --json
 uv run app weather current --symbol TQQQ --json
 uv run app capital status
-uv run app dashboard start
 ```
 
 > [!CAUTION]
-> `automation tick`은 시각 확인 명령이 아닙니다. ON 프로필에서 실제 주문을 실행할 수 있습니다. `automation on`, `automation off`, `automation tick`, `reconcile`, `capital apply`, `emergency-stop on/off`도 상태나 실계좌에 영향을 줄 수 있으므로 핸드오프의 권한 규칙을 먼저 확인하세요.
+> 위 조회 목록과 `uv run app ... --help` 이외의 명령은 기본적으로 상태·프로세스·파일을 변경할 수 있습니다. Hermes는 사용자가 정확한 명령과 대상을 명시한 경우에만 실행해야 합니다.
+
+특히 다음 명령은 실계좌나 핵심 안전 상태에 직접 영향을 줄 수 있습니다.
+
+| 명령 | 실제 영향 |
+|---|---|
+| `run sell-phase`, `run buy-phase` | 모든 게이트 통과 시 실제 주문 제출 가능 |
+| `automation tick` | ON 프로필에서 실제 주문 단계 실행 가능 |
+| `orders cancel`, `automation off` | DB증권 미체결 주문 취소 가능 |
+| `automation on`, `emergency-stop off` | 신규 주문을 허용하는 상태로 변경 가능 |
+| `capability verify` | 실주문 안전 게이트에 쓰는 증거 상태 변경 |
+| `reconcile` | DB증권 조회 결과에 따라 로컬 대사·잠금 상태 변경 |
+| `capital propose/apply/scan` | 자금 관련 로컬 상태 생성·변경 가능 |
+| `backup restore` | 활성 SQLite 상태 교체 |
+
+`setup`, `profile create`, `weather update`, `emergency-stop on`, `backup create`, `diagnostics`, `dashboard start`도 주문 제출 명령은 아니지만 로컬 상태·파일·프로세스를 변경하므로 사용자 요청 없이 실행하지 않습니다.
 
 `capital scan`은 DB증권 입출금·환전·결제내역 capability와 공식 응답 fixture가 확인되기 전까지 의도적으로 차단됩니다.
 

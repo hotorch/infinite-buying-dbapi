@@ -10,7 +10,7 @@ Always-on. This handles real money on leveraged ETFs — when in doubt, fail clo
 - **No live path on unverified capability.** Never build a real `live` order path on an unverified DB Securities capability. Verified vs unverified is tracked in `docs/dbsec-capability-matrix.md` (확인됨 vs 확인 필요).
 - **Live mode fails closed.** `RECONCILIATION_REQUIRED` blocks new orders; never resend an ambiguous/timed-out order; never hand-edit the SQLite state file.
 - **Immutable-versioned ruleset.** To change strategy rules, create a NEW ruleset version + NEW golden vectors — never overwrite `pure-v4-ruleset-1`.
-- **Secrets never leak.** APP_KEY / APP_SECRET / access token / account number never appear in committed `.env`, README, logs, or command output. Storage is Windows Credential Manager via `keyring`; `security.py` redacts; diagnostics stay `--redacted`.
+- **Secrets never leak.** APP_KEY / APP_SECRET / access token / account number never appear in committed `.env`, README, logs, or command output. Storage is the OS keychain via `keyring` (Windows Credential Manager or macOS Keychain); `security.py` redacts; diagnostics stay `--redacted`.
 
 ## Project map
 
@@ -28,6 +28,11 @@ Source — `src/infinite_buying_dbapi/`:
 | `src/infinite_buying_dbapi/market_calendar.py` | XNYS sessions, DST, holidays, early closes. |
 | `src/infinite_buying_dbapi/rate_limit.py` | Cross-process DB Securities request interval. |
 | `src/infinite_buying_dbapi/replay.py` | Deterministic synthetic fill replay via the production core. |
+| `src/infinite_buying_dbapi/backtest.py` | Deterministic historical backtest engine and result contract. |
+| `src/infinite_buying_dbapi/market_data.py` | Frozen local market-data validation, collection, and metadata. |
+| `src/infinite_buying_dbapi/weather.py` | Reporting-only regime weather calculation and snapshots. |
+| `src/infinite_buying_dbapi/capital.py` | User-directed capital proposals/events; no LLM allocation decisions. |
+| `src/infinite_buying_dbapi/positions.py` | Cycle/session reporting projections. |
 | `src/infinite_buying_dbapi/service.py` | Two-phase (sell/buy) planning. |
 | `src/infinite_buying_dbapi/cli.py` | Typer operator commands. |
 | `src/infinite_buying_dbapi/config.py` | pydantic-settings (`IB_*` env), keyring-backed secrets. |
@@ -42,7 +47,8 @@ Docs — read the relevant one before changing related code:
 | `docs/ruleset-1.md` | V4 formula & partial-fill rules (strategy source of truth). |
 | `docs/testbed-protocol.md` | Opposing-LOC test that must pass before live enablement. |
 | `docs/operations.md` | Operator runbook. |
-| `docs/manuals/README.md` + `docs/manuals/01`..`07` | Korean beginner manuals. |
+| `docs/manuals/README.md`, `docs/manuals/01`..`03`, `docs/manuals/05`..`07` | Korean beginner manuals; chapter 04 is `docs/hermes-handoff.md`. |
+| `docs/hermes-handoff.md` | Repository-connected Hermes/agent entry document and command authority boundary. |
 | `README.md` | Korean user guide; §1 lists what the program does NOT do. |
 
 ## Rules & conventions
@@ -50,7 +56,7 @@ Docs — read the relevant one before changing related code:
 - Python ≥3.12, `uv`-managed. Install deps with `uv sync --python 3.12` (add `--extra dev` for tests).
 - Lint: ruff, select `E4,E7,E9,F,I`, line-length 160, target py312.
 - Tests: pytest; coverage source `infinite_buying_dbapi`, `fail_under = 80`; golden vectors in `tests/golden/`.
-- Platform quirks, Korean/English reply mirroring, and Karpathy coding principles live in `~/.claude/CLAUDE.md` and apply here — don't restate them.
+- On an operator machine where `~/.claude/CLAUDE.md` exists, its platform quirks, Korean/English reply mirroring, and Karpathy coding principles also apply as local supplements. This `AGENTS.md` remains complete for repository safety-critical rules when that external file is unavailable.
 
 ## Capability boundaries
 
@@ -59,6 +65,7 @@ Docs — read the relevant one before changing related code:
 - **Hermes/LLM advice is data-only.** Advisory proposals are rejected by default and cannot change strategy state, prices, quantities, `T`, or broker payloads. Hermes is read-only by default. It may run an exact state-changing CLI command only when the user explicitly authorizes it. A recurring `automation tick` is allowed only when the user separately configures that fixed schedule and explicitly enables the target profile; Hermes never turns its own market opinion into an order.
 - **Weather is reporting data, not a strategy input.** It may explain the current regime and appear in reports, but it does not select a profile, allocate capital, or change a V4 order.
 - **CLI surface:** `setup`, `profile`, `preview`, `capability verify`, `run sell-phase|buy-phase`, `reconcile`, `orders`, `emergency-stop`, `backup`, `dbsec` (read-only), `automation`, `capital`, `weather`, `position`, `report`, `dashboard`, `replay`/`backtest`, `diagnostics`.
+- **Agent command authority.** Without an exact user instruction, agents may use only the read-only commands listed in `docs/hermes-handoff.md` §15. Treat every other command as stateful. In particular, `run sell-phase|buy-phase` and `automation tick` can submit real orders; `orders cancel` and `automation off` can cancel broker orders; `capability verify` changes live-gate evidence; and `backup restore` replaces active SQLite state.
 
 ## Lessons learned / guardrails
 
