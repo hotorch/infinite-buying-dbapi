@@ -29,7 +29,20 @@ uv run app capital status
 uv run app report daily --session-date latest --json
 ```
 
-Hermes는 기본적으로 위 조회와 결과 설명만 수행한다. 날씨와 LLM 의견은 전략 주문이나 자금 배분을 바꾸지 않는다.
+Hermes는 기본적으로 위 조회와 결과 설명만 수행한다. 날씨와 LLM 의견은 전략 주문이나 자금 배분을 바꾸지 않는다. 위 조회와 `uv run app ... --help` 이외의 명령은 사용자가 정확한 명령과 대상을 지시한 경우에만 실행한다.
+
+다음 명령은 특히 실계좌나 핵심 안전 상태에 직접 영향을 줄 수 있다.
+
+| 명령 | 실제 영향 |
+|---|---|
+| `run sell-phase`, `run buy-phase`, `automation tick` | 모든 게이트 통과 시 실제 주문 제출 가능 |
+| `orders cancel`, `automation off` | DB증권 미체결 주문 취소 가능 |
+| `automation on`, `emergency-stop off` | 신규 주문을 허용하는 상태로 변경 가능 |
+| `capability verify` | 실주문 게이트 증거 상태 변경 |
+| `reconcile`, `capital propose/apply/scan` | 대사·자금 로컬 상태 변경 가능 |
+| `backup restore` | 활성 SQLite 상태 교체 |
+
+`setup`, `profile create`, `weather update`, `emergency-stop on`, `backup create`, `diagnostics`, `dashboard start`도 로컬 상태·파일·프로세스를 변경하므로 사용자 요청 없이 실행하지 않는다.
 
 ## 3. ON과 자동 실행
 

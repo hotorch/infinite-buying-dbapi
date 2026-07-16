@@ -6,7 +6,9 @@
 
 Hermes는 기본적으로 상태를 조회하고 결과를 설명합니다. Hermes의 시장 의견이나 날씨 값은 주문 가격·수량·`T`·자금 배분을 바꿀 수 없습니다.
 
-`automation on`, `automation off`, `automation tick`, `reconcile`, `capital apply`, `emergency-stop on/off`는 상태나 실계좌에 영향을 줄 수 있습니다. Hermes는 사용자가 정확한 명령과 대상을 명시한 경우에만 해당 명령을 실행합니다.
+`run sell-phase`, `run buy-phase`, `automation tick`은 안전 게이트 통과 시 실제 주문을 제출할 수 있습니다. `orders cancel`과 `automation off`는 DB증권 주문을 취소할 수 있습니다. `automation on`, `capability verify`, `reconcile`, `capital propose/apply/scan`, `emergency-stop on/off`, `backup restore`도 핵심 안전 상태를 바꿀 수 있습니다.
+
+Hermes가 명시적 지시 없이 사용할 수 있는 것은 `docs/hermes-handoff.md` 15절의 조회 전용 목록뿐입니다. 그 밖의 명령은 사용자가 정확한 명령과 대상을 명시한 경우에만 실행합니다. `setup`, `profile create`, `weather update`, `backup create`, `diagnostics`, `dashboard start`도 로컬 상태·파일·프로세스를 변경하므로 예외가 아닙니다.
 
 ## ON 전 확인
 

@@ -1,6 +1,8 @@
 # Hermes 프로젝트 핸드오프
 
-이 문서는 Hermes가 이 프로젝트를 처음 이해할 때 읽는 시작 문서다. 경로는 모두 저장소 루트 기준이다.
+이 문서는 저장소에 연결된 Hermes가 이 프로젝트를 처음 이해할 때 읽는 단일 진입 문서다. 경로는 모두 저장소 루트 기준이다. 저장소에 접근할 수 있으면 먼저 `AGENTS.md`를 읽고, 이 문서가 가리키는 원문과 실제 CLI를 함께 확인한다.
+
+이 파일만 저장소 밖으로 복사받은 Hermes는 코드·규칙 원문·현재 capability를 검증할 수 없다. 그런 상태에서는 설명만 하고, 로컬 상태를 바꾸거나 실계좌에 영향을 주는 명령을 실행하지 않는다.
 
 이 저장소는 Hermes용 skill, 실행 wrapper, cron 일정, Slack 연결, Gateway 설정을 제공하지 않는다. 그런 외부 연결은 사용자가 별도로 구성한다.
 
@@ -35,9 +37,9 @@ Hermes의 기본 역할은 **조회와 설명**이다.
 - 오류가 나면 오류 코드와 다음 안전 조치를 알려준다.
 - 코드나 문서가 서로 다르면 주문하지 않고 차이를 보고한다.
 
-Hermes의 시장 의견이나 advisory proposal은 데이터일 뿐이다. 전략 상태, 주문 가격·수량, `T`, broker payload를 바꿀 수 없다.
+Hermes의 시장 의견이나 advisory proposal(외부 조언 제안)은 데이터일 뿐이다. 전략 상태, 주문 가격·수량, `T`, broker payload(브로커 전송값)를 바꿀 수 없다.
 
-상태를 바꾸거나 실계좌에 영향을 주는 명령은 Hermes가 스스로 판단해 실행하지 않는다. 사용자가 **정확한 명령과 대상을 명시적으로 지시한 경우에만** 그 명령을 기계적으로 실행할 수 있다. 반복 `automation tick`은 사용자가 고정 일정을 별도로 구성하고 대상 프로필을 명시적으로 ON으로 만든 경우에만 그 승인 범위 안에서 실행한다.
+상태를 바꾸거나 실계좌에 영향을 주는 명령은 Hermes가 스스로 판단해 실행하지 않는다. 사용자가 **정확한 명령과 대상을 명시적으로 지시한 경우에만** 그 명령을 기계적으로 실행할 수 있다. 명시적 지시 없이 실행할 수 있는 명령은 15절의 조회 전용 목록뿐이다. 반복 `automation tick`은 사용자가 고정 일정을 별도로 구성하고 대상 프로필을 명시적으로 ON으로 만든 경우에만 그 승인 범위 안에서 실행한다.
 
 ## 4. 무한매수 V4의 사전 맥락
 
@@ -84,6 +86,12 @@ Hermes의 시장 의견이나 advisory proposal은 데이터일 뿐이다. 전�
 | LIMIT | 지정가 주문 |
 | MOC | 종가 시장가 주문 |
 | 대사(reconciliation) | DB증권의 실제 보유·주문과 로컬 기록이 같은지 비교하는 절차 |
+| fail-closed | 조건이 하나라도 불확실하면 주문을 허용하지 않는 방식 |
+| capability | DB증권 기능이 공식 문서나 요구된 실증으로 확인됐는지 나타내는 안전 근거 |
+| readiness | 프로필 ON 전에 자격증명·capability·대사·자금 등 모든 안전 조건을 모아 검사한 결과 |
+| outbox | 계산된 주문 의도와 제출 상태를 보관해 중복 제출을 막는 로컬 기록 |
+| fixture | 비밀값을 제거하고 테스트용으로 고정해 둔 API 응답 예시 |
+| envelope | 자동화가 성공·경고·오류를 같은 구조로 읽도록 감싼 JSON 출력 형식 |
 
 30분할은 preview와 백테스트만 가능하다. 20분할과 40분할만 모든 검증을 통과한 뒤 실주문 후보가 될 수 있다.
 
@@ -225,6 +233,7 @@ Hermes는 전략을 설명하거나 운영 상태를 판단하기 전에 다음 
 
 | 상대경로 | 쉬운 설명 |
 |---|---|
+| `AGENTS.md` | 저장소 전체에 항상 적용되는 개발·안전 규칙 |
 | `README.md` | 설치부터 첫 점검까지 설명하는 사용자 안내서 |
 | `docs/ruleset-1.md` | V4 계산식과 체결 규칙의 기준 문서 |
 | `docs/operations.md` | 운영 명령 요약 |
@@ -245,17 +254,27 @@ uv sync --python 3.12
 uv run app --help
 ```
 
-다음은 주문을 보내지 않는 조회 명령이다.
+다음은 명시적 상태 변경 승인 없이 사용할 수 있는 조회 전용 명령이다. DB증권 조회는 계좌나 주문을 바꾸지 않지만 인증 토큰 발급·갱신과 네트워크 요청이 발생할 수 있다.
 
 ```powershell
+uv run app --help
+uv run app profile list
 uv run app dbsec auth-status
 uv run app dbsec balance
 uv run app dbsec holdings
+uv run app dbsec transaction-history --start YYYY-MM-DD --end YYYY-MM-DD
+uv run app dbsec current-price --symbol TQQQ
+uv run app dbsec daily-chart --symbol TQQQ --start YYYY-MM-DD --end YYYY-MM-DD
 uv run app automation status --json
 uv run app position status --json
 uv run app orders list --json
 uv run app capital status
+uv run app weather current --symbol TQQQ --json
+uv run app weather history --symbol TQQQ --limit 20 --json
+uv run app report daily --session-date latest --json
 ```
+
+`YYYY-MM-DD`는 사용자가 요청한 실제 날짜로 바꾸고, 종목은 TQQQ 또는 SOXL만 사용한다. 날짜나 종목을 추측하지 않는다.
 
 잔고나 보유내역이 없는 새 계좌에서는 0건이 정상일 수 있다. DB증권의 `2679`는 이 경우 빈 결과로 처리한다. 다른 오류 코드는 빈 계좌라고 추측하지 않는다.
 
@@ -292,20 +311,24 @@ uv run app weather update --symbol TQQQ --json
 
 SOXL은 `--symbol SOXL`을 사용한다.
 
-## 17. 상태를 바꾸는 명령
+## 17. 조회 전용이 아닌 명령
 
-아래 명령은 조회 전용이 아니다.
+15절의 조회 전용 목록과 `uv run app ... --help` 이외의 명령은 상태·파일·프로세스를 변경할 수 있다고 취급한다. 특히 다음 명령은 실계좌나 핵심 안전 상태에 직접 영향을 줄 수 있다.
 
 | 명령 | 실제 영향 |
 |---|---|
-| `automation on` | 프로필을 ON으로 바꿈 |
-| `automation off` | 먼저 OFF로 바꾸고 미체결 취소·재조회를 시도함 |
-| `automation tick` | ON 프로필에서 실제 주문 단계가 실행될 수 있음 |
-| `reconcile` | DB증권과 비교해 로컬 대사 상태를 갱신함 |
-| `capital apply` | 프로필 자금과 SQLite 상태를 변경함 |
-| `emergency-stop on/off` | 전체 비상정지 상태를 변경함 |
+| `run sell-phase`, `run buy-phase` | 모든 게이트 통과 시 DB증권에 실제 주문 제출 가능 |
+| `automation tick` | ON 프로필에서 실제 매도·매수 단계 실행 가능 |
+| `orders cancel` | 지정한 DB증권 주문 취소 요청 |
+| `automation off` | 먼저 OFF로 바꾸고 미체결 주문 취소·재조회 시도 |
+| `automation on` | readiness 통과 후 프로필을 신규 주문 허용 상태로 변경 |
+| `emergency-stop off` | 전체 비상정지를 해제해 다른 게이트 통과 시 주문 가능 |
+| `capability verify` | 실주문 게이트에 사용되는 capability 증거 상태 변경 |
+| `reconcile` | DB증권과 비교해 로컬 대사·잠금 상태 갱신 |
+| `capital propose/apply/scan` | 자금 관련 로컬 상태 생성·변경 가능 |
+| `backup restore` | 활성 SQLite를 백업 파일 상태로 교체 |
 
-Hermes는 사용자의 명시적 지시 없이 이 명령을 실행하지 않는다.
+`setup`, `profile create`, `weather update`, `emergency-stop on`, `backup create`, `diagnostics`, `dashboard start`도 실주문 제출 명령은 아니지만 로컬 상태·파일·프로세스를 변경한다. Hermes는 사용자의 정확한 명령과 대상 지시 없이 17절의 어떤 명령도 실행하지 않는다.
 
 ON 전환 전에는 먼저 다음을 확인한다. 비상정지 해제도 상태 변경이므로 사용자가 명시적으로 지시해야 한다.
 
@@ -317,7 +340,7 @@ uv run app automation on --help
 
 사용자가 외부 실행환경 준비 완료와 정확한 프로필 ON을 명시했고 readiness의 모든 항목이 통과한 경우에만 현재 `--help` 계약대로 실행한다. capability를 문서 검토만으로 `확인됨` 처리하지 않는다.
 
-`capital scan`은 DB증권 입출금·환전·결제내역 capability와 공식 응답 fixture가 확인될 때까지 실패하는 것이 정상이다. 결과를 추측하거나 SQLite에 자금 이벤트를 만들지 않는다.
+`capital scan`은 DB증권 입출금·환전·결제내역 capability와 공식 응답 fixture가 확인될 때까지 실패하는 것이 정상이다. 사용자가 실행을 명시적으로 지시하더라도 결과를 추측하거나 SQLite에 자금 이벤트를 만들지 않는다.
 
 ## 18. 오류가 나면
 
@@ -364,4 +387,4 @@ schema_version, ok, data, warnings, errors, generated_at
 - Hermes Gateway
 - 외부 서비스의 자격증명과 접근 권한
 
-외부 구성이 끝난 뒤에도 프로젝트 조작에는 이 문서에 적힌 상대경로와 공개 CLI만 사용한다.
+외부 구성이 끝난 뒤에도 프로젝트 조작에는 이 문서에 적힌 상대경로와 공개 CLI만 사용한다. 이 문서는 진입점이지 독립 실행 허가서가 아니며, 저장소 원문을 확인할 수 없으면 조회 설명만 한다.
