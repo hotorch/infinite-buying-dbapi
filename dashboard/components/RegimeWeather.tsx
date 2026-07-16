@@ -1,5 +1,5 @@
 import { percent, shortDate } from "@/lib/format";
-import type { RegimeWeatherRow, WeatherState } from "@/lib/types";
+import type { RegimeWeatherRow, WeatherResearch, WeatherState } from "@/lib/types";
 
 const WEATHER_ORDER: WeatherState[] = ["strong_green", "early_thaw", "green", "yellow", "orange", "red"];
 
@@ -48,39 +48,24 @@ const WEATHER_META: Record<WeatherState, { icon: string; label: string; regime: 
   },
 };
 
-const REASON_LABELS: Record<string, string> = {
-  stage4_breakdown: "Stage 4 하락 구조",
-  "50ma_below_150ma": "50일선이 150일선 아래",
-  "200ma_not_rising": "200일선 상승 실패",
-  close_below_200ma: "종가가 200일선 아래",
-  signal_trend_template_failed: "QQQ 추세 템플릿 실패",
-  signal_200ma_not_rising: "QQQ 200일선 상승 실패",
-  not_30pct_above_52w_low: "52주 저점 대비 30% 미만",
-  more_than_25pct_below_52w_high: "52주 고점 대비 25% 넘게 하락",
-  close_below_50ma: "종가가 50일선 아래",
-  leveraged_etf_liquidity_below_floor: "TQQQ 유동성 하한 미달",
-  extended_above_50ma: "50일선 상방 이격 과다",
-  relative_strength_below_floor: "SPY 대비 상대강도 부족",
-  three_month_momentum_not_positive: "3개월 모멘텀 비양수",
-  six_month_momentum_not_positive: "6개월 모멘텀 비양수",
-};
-
 type Props = {
   weather?: RegimeWeatherRow;
+  research?: WeatherResearch;
   symbol: "TQQQ" | "SOXL";
   selectedDate: string;
   latestAvailableDate: string;
 };
 
-export function RegimeWeather({ weather, symbol, selectedDate, latestAvailableDate }: Props) {
+export function RegimeWeather({ weather, research, symbol, selectedDate, latestAvailableDate }: Props) {
   if (!weather) return <MissingWeather selectedDate={selectedDate} symbol={symbol} />;
 
   const meta = WEATHER_META[weather.weather_state];
   const isLatestWeather = weather.date === latestAvailableDate;
   const isFallback = weather.date !== selectedDate;
   const chaseWarning = weather.regime === "strong_green" && (weather.signal_distance_50 ?? 0) >= 0.05;
-  const reasonLabels = weather.reasons.map((reason) => REASON_LABELS[reason] ?? reason.replaceAll("_", " "));
   const signal = weather.signal_symbol;
+  const benchmark = weather.benchmark_symbol ?? "SPY";
+  const reasonLabels = weather.reasons.map((reason) => reasonLabel(reason, signal, symbol, benchmark));
 
   return (
     <section className={`weatherSection weatherTone-${weather.weather_state}`} aria-labelledby="weather-title">
@@ -110,7 +95,7 @@ export function RegimeWeather({ weather, symbol, selectedDate, latestAvailableDa
             <span className="weatherRegime">{meta.regime}</span>
             <h3>{meta.label}</h3>
             <b>{chaseWarning ? "좋지만 추격은 줄일 때" : meta.action}</b>
-            <p>{chaseWarning ? "TQQQ가 50일선 위 5-8% 구간이면 과거 평균이 둔화되어 첫 주문 0.5배 또는 보류 후보입니다." : meta.summary}</p>
+            <p>{chaseWarning ? `${symbol}이 50일선 위 5-8% 구간이면 과거 평균이 둔화되어 첫 주문 0.5배 또는 보류 후보입니다.` : meta.summary}</p>
           </div>
         </div>
 
@@ -118,7 +103,7 @@ export function RegimeWeather({ weather, symbol, selectedDate, latestAvailableDa
           <Metric label="레짐 점수" value={weather.score.toFixed(3)} note="strong 기준 0.200" pass={weather.score >= 0.2} />
           <Metric label={`${signal} 3개월`} value={formatPercent(weather.signal_return_3m)} note="strong 기준 +8%" pass={(weather.signal_return_3m ?? -1) >= 0.08} />
           <Metric label={`${signal} 6개월`} value={formatPercent(weather.signal_return_6m)} note="strong 기준 +12%" pass={(weather.signal_return_6m ?? -1) >= 0.12} />
-          <Metric label="SPY 대비 RS" value={formatPercent(weather.signal_rs)} note="strong 기준 +8%" pass={(weather.signal_rs ?? -1) >= 0.08} />
+          <Metric label={`${benchmark} 대비 RS`} value={formatPercent(weather.signal_rs)} note="strong 기준 +8%" pass={(weather.signal_rs ?? -1) >= 0.08} />
           <Metric label="50일선 이격" value={formatPercent(weather.signal_distance_50)} note="strong 상한 +8%" pass={(weather.signal_distance_50 ?? 1) <= 0.08} />
         </dl>
       </div>
@@ -152,31 +137,52 @@ export function RegimeWeather({ weather, symbol, selectedDate, latestAvailableDa
         </details>
 
         <div className="regimeAccordion">
-          {WEATHER_ORDER.map((state) => <RegimeExplanation key={state} state={state} current={state === weather.weather_state} />)}
+          {WEATHER_ORDER.map((state) => <RegimeExplanation key={state} state={state} current={state === weather.weather_state} symbol={symbol} signal={signal} benchmark={benchmark} />)}
         </div>
       </div>
 
       <div className="historyNotes">
-        <div><b>early thaw 과거 표본</b><span>TQQQ 48건의 60일 평균 +8.77%, 승률 77.08%. 최악 수익은 -41.98%라 1-2분할 탐색으로 제한했습니다.</span></div>
-        <div><b>strong_green 초입</b><span>첫 1-3세션의 60일 평균은 TQQQ +13.56%(10건), SOXL +9.46%(28건)였습니다. 표본은 작습니다.</span></div>
-        <div><b>폭풍 뒤 반등의 함정</b><span>orange 첫날 뒤 평균은 올랐지만 TQQQ 최악 60일 수익 -48.11%, SOXL -57.28%였습니다. 반등 기대만으로 매수 신호로 쓰지 않습니다.</span></div>
+        {research && research.sample_count > 0
+          ? <div><b>{symbol} {meta.regime} 진입 표본</b><span>{research.through_date}까지 완료된 {research.sample_count}건의 {research.horizon_sessions}거래일 평균 {formatPercent(research.average_return)}, 승률 {formatPercent(research.win_rate)}, 최악 {formatPercent(research.worst_return)}입니다.</span></div>
+          : <div><b>{symbol} 표본 부족</b><span>선택한 종료일까지 {weather.weather_state} 진입 후 60거래일이 모두 지난 독립 표본이 없습니다.</span></div>}
+        <div><b>표본 계산 원칙</b><span>{symbol}의 해당 날씨 진입일 종가부터 60거래일 뒤 종가까지 계산하며, 다른 레버리지 ETF의 수익률을 대신 사용하지 않습니다.</span></div>
       </div>
     </section>
   );
+}
+
+function reasonLabel(reason: string, signal: "QQQ" | "SMH", symbol: "TQQQ" | "SOXL", benchmark: string) {
+  const labels: Record<string, string> = {
+    stage4_breakdown: "Stage 4 하락 구조",
+    "50ma_below_150ma": "50일선이 150일선 아래",
+    "200ma_not_rising": "200일선 상승 실패",
+    close_below_200ma: "종가가 200일선 아래",
+    signal_trend_template_failed: `${signal} 추세 템플릿 실패`,
+    signal_200ma_not_rising: `${signal} 200일선 상승 실패`,
+    not_30pct_above_52w_low: "52주 저점 대비 30% 미만",
+    more_than_25pct_below_52w_high: "52주 고점 대비 25% 넘게 하락",
+    close_below_50ma: "종가가 50일선 아래",
+    leveraged_etf_liquidity_below_floor: `${symbol} 유동성 하한 미달`,
+    extended_above_50ma: "50일선 상방 이격 과다",
+    relative_strength_below_floor: `${benchmark} 대비 상대강도 부족`,
+    three_month_momentum_not_positive: "3개월 모멘텀 비양수",
+    six_month_momentum_not_positive: "6개월 모멘텀 비양수",
+  };
+  return labels[reason] ?? reason.replaceAll("_", " ");
 }
 
 function Metric({ label, value, note, pass }: { label: string; value: string; note: string; pass: boolean }) {
   return <div><dt>{label}</dt><dd>{value}</dd><small className={pass ? "metricPass" : ""}>{pass ? "기준 통과" : note}</small></div>;
 }
 
-function RegimeExplanation({ state, current }: { state: WeatherState; current: boolean }) {
+function RegimeExplanation({ state, current, symbol, signal, benchmark }: { state: WeatherState; current: boolean; symbol: "TQQQ" | "SOXL"; signal: "QQQ" | "SMH"; benchmark: string }) {
   const meta = WEATHER_META[state];
   const criteria: Record<WeatherState, string> = {
-    strong_green: "기본 추세 조건을 모두 통과하고 점수 0.20 이상, 3개월 +8% 이상, 6개월 +12% 이상, SPY 대비 RS +8% 이상, 50일선 상방 이격 +8% 이하, TQQQ 거래대금이 기본 하한의 5배 이상일 때입니다.",
-    early_thaw: "green 또는 yellow에서 QQQ가 상승 중인 50일선 위, 3개월 수익과 RS가 0-8%, 50일선 이격이 0-5%, 최근 60거래일 안에 orange 또는 red가 있었을 때입니다.",
+    strong_green: `기본 추세 조건을 모두 통과하고 점수 0.20 이상, 3개월 +8% 이상, 6개월 +12% 이상, ${benchmark} 대비 RS +8% 이상, 50일선 상방 이격 +8% 이하, ${symbol} 거래대금이 기본 하한의 5배 이상일 때입니다.`,
+    early_thaw: `green 또는 yellow에서 ${signal}이 상승 중인 50일선 위, 3개월 수익과 RS가 0-8%, 50일선 이격이 0-5%, 최근 60거래일 안에 orange 또는 red가 있었을 때입니다.`,
     green: "장단기 이동평균, 52주 위치, 유동성, 3개월과 6개월 모멘텀, RS 조건에 실패 이유가 없지만 strong_green의 강화 기준을 모두 채우지는 못한 상태입니다.",
     yellow: "red 하드 브레이크와 orange 추세 붕괴는 없지만, 과도한 50일선 이격이나 3개월·6개월 모멘텀 또는 RS 부족 같은 경고가 하나 이상 남은 상태입니다.",
-    orange: "red 하드 브레이크는 아니지만 추세 템플릿, 200일선 상승, 52주 저·고점 위치, 50일선 방어 또는 TQQQ 유동성 중 하나가 실패한 상태입니다.",
+    orange: `red 하드 브레이크는 아니지만 추세 템플릿, 200일선 상승, 52주 저·고점 위치, 50일선 방어 또는 ${symbol} 유동성 중 하나가 실패한 상태입니다.`,
     red: "Stage 4 구조, 50일선의 150일선 하향 이탈, 200일선 하락 또는 종가의 200일선 하향 이탈 중 하나가 발생한 상태입니다.",
   };
   return (

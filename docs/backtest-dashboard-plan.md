@@ -31,7 +31,7 @@
 | 슬리피지 | 미반영 |
 | 세금 | 미반영 |
 | 주식 수량 | 정수 주식만 허용 |
-| 비교 기준 | 같은 기간 QQQ 매수 후 보유 |
+| 비교 기준 | TQQQ는 TQQQ·QQQ·SPY, SOXL은 SOXL·SMH·SPY의 같은 기간 매수 후 보유 |
 
 시작일이 휴장일이면 다음 미국 거래일을 사용하고, 시작일 이전 5거래일은 워밍업에만 사용한다. 첫 주문에 필요한 금액이 입력 자본보다 크면 실행하지 않고 필요한 최소금액을 안내한다.
 
@@ -40,12 +40,12 @@
 1. 상단 입력 패널에서 종목, 분할 수, 초기 자본, 시작일, 종료일을 선택한다.
 2. `백테스트 실행`을 누르면 진행 상태를 `데이터 확인 → 전략 계산 → 결과 준비`의 세 단계로 보여준다.
 3. 결과 위에는 실제 적용된 종목, 기간, 분할, 자본, 수수료, 가격 기준을 한 줄로 다시 표시한다.
-4. 핵심 요약 카드 6개에는 총수익률, CAGR, MDD, 최종자산, QQQ 대비 성과, 완료 사이클 수를 표시한다.
+4. 핵심 요약에는 총수익률, CAGR, MDD, 최종자산, 동일 ETF·기초 ETF·시장 대비 성과, 완료 사이클 수를 표시한다.
 5. 요약 아래에 `차트 읽는 법` 안내 상자를 두고 다음 세 문장을 기본으로 노출한다.
    - 초록·빨강 막대는 그날의 가격 움직임입니다.
    - 파란 선은 내가 산 평균가격, 별표는 별지점 주문이 발생한 날입니다.
    - 아래쪽 자산과 낙폭 차트도 같은 날짜를 함께 가리킵니다.
-6. 차트는 가격·체결, 자산·QQQ, 낙폭의 세 패널을 하나의 시간축으로 보여준다.
+6. 차트는 가격·체결, 전략 자산·세 벤치마크, 낙폭의 세 패널을 하나의 시간축으로 보여준다.
 7. 차트에 마우스를 올리거나 키보드로 날짜를 이동하면 세 패널이 같은 날짜를 가리키고, 상세 툴팁을 표시한다.
 8. 체결 내역은 기본적으로 접어 두고, 펼치면 사이클 경계와 쉬운 체결 종류를 포함한 표를 보여준다.
 9. 전체 결과 JSON과 체결 내역 CSV를 내려받을 수 있게 한다.
@@ -91,7 +91,7 @@
 
 - 가격: 시가, 고가, 저가, 종가
 - 내 상태: 평균가격, 별가격, 목표가격, T, 보유수량, 현금, 총자산
-- 비교: 전략 수익률, QQQ 수익률, 현재 낙폭
+- 비교: 전략 수익률, 동일 ETF·기초 ETF·시장 수익률, 현재 낙폭
 - 오늘의 체결: 해당 날짜의 체결 셀을 시간순으로 표시
 
 마우스를 사용하지 못하는 경우를 위해 차트 아래에 `선택한 날짜 상세` HTML 영역을 두고 같은 내용을 텍스트로 제공한다.
@@ -105,22 +105,28 @@ request
   symbol, division_count, capital, start_date, end_date
 
 summary
-  total_return, cagr, mdd, final_equity, benchmark_return,
-  excess_return, cycle_count, trading_days, buy_count, sell_count
+  total_return, cagr, mdd, final_equity, benchmarks[],
+  cycle_count, trading_days, buy_count, sell_count
 
 assumptions
   ruleset_version, price_basis, fee_rate, slippage, tax,
-  warmup_sessions, requested_dates, effective_dates, digest
+  warmup_sessions, benchmarks[], requested_dates, effective_dates, digest
 
 daily[]
   date, open, high, low, close, avg_cost, star_price, target_price,
-  t, quantity, cash, invested, equity, qqq_equity, drawdown, cycle_id
+  t, quantity, cash, invested, equity, benchmark_equities, drawdown, cycle_id
 
 events[]
   date, side, role, quantity, price, fee, reason_code, cycle_id
+
+weather_research[]
+  symbol, weather_state, horizon_sessions, sample_count,
+  average_return, win_rate, worst_return, through_date
 ```
 
 숫자 계산과 역할 판정은 Python에서만 수행한다. TypeScript는 표시 형식과 상호작용만 담당한다.
+
+날씨의 과거 표본은 선택한 ETF가 해당 `weather_state`로 전환된 세션의 종가부터 60거래일 뒤 종가까지 계산한다. 종료일 뒤 가격은 사용하지 않으며, TQQQ 통계를 SOXL 표본으로 대체하거나 그 반대도 하지 않는다. 날씨 분류 자체는 TQQQ에 QQQ, SOXL에 SMH를 신호로 쓰고 공통으로 SPY 상대강도를 사용한다.
 
 ## 구현 구조
 
@@ -150,7 +156,7 @@ TradeHistory
 
 - CSV 전처리와 거래일 범위를 먼저 검증한다.
 - LOC, LIMIT, MOC 체결을 보수적으로 판정한다.
-- 수수료, 일별 평가금, QQQ 비교, 총수익률, CAGR, MDD를 계산한다.
+- 수수료, 일별 평가금, 종목별 세 벤치마크 비교, 총수익률, CAGR, MDD를 계산한다.
 - 기본값 한 건을 JSON fixture로 저장해 사람이 체결과 최종 결과를 확인한다.
 
 검증: 같은 입력의 결과와 digest가 항상 같고, 기존 전략 테스트가 모두 통과해야 한다.
@@ -173,7 +179,7 @@ TradeHistory
 
 ### 4. 차트와 범례
 
-- 가격, 자산·QQQ, 낙폭 패널을 만든다.
+- 가격, 전략 자산·세 벤치마크, 낙폭 패널을 만든다.
 - 기본 범례와 전체 범례를 연결한다.
 - 별지점 마커, 매수·매도 마커, 사이클 경계를 표시한다.
 - 공유 크로스헤어, 툴팁, 선택한 날짜 상세를 연결한다.

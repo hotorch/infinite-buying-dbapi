@@ -17,6 +17,7 @@ from .models import (
     Side,
     StrategyProfile,
     StrategyState,
+    WeatherSnapshot,
     stable_hash,
 )
 from .strategy import apply_fill, generate_intents, star_price
@@ -26,6 +27,12 @@ FEE_RATE = Decimal("0.0004")
 MINIMUM_CAPITAL = Decimal("1")
 WARMUP_SESSIONS = 5
 DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "market"
+BENCHMARK_GROUPS = {
+    "TQQQ": (("TQQQ", "same_asset"), ("QQQ", "underlying"), ("SPY", "market")),
+    "SOXL": (("SOXL", "same_asset"), ("SMH", "underlying"), ("SPY", "market")),
+}
+WEATHER_RESEARCH_HORIZON = 60
+WEATHER_STATES = ("strong_green", "early_thaw", "green", "yellow", "orange", "red")
 
 
 class BacktestError(ValueError):
@@ -55,8 +62,11 @@ def run_backtest(request: dict[str, Any]) -> dict[str, Any]:
     requested_end = parsed["end_date"]
 
     symbol_rows = _load_prices(symbol)
-    benchmark_symbol = BENCHMARK_SYMBOL if (DATA_DIR / "spy_adjusted_daily.csv").exists() else "QQQ"
-    benchmark_rows = {row.date: row for row in _load_prices(benchmark_symbol)}
+    benchmark_definitions = BENCHMARK_GROUPS[symbol]
+    benchmark_rows = {
+        benchmark_symbol: {row.date: row for row in (symbol_rows if benchmark_symbol == symbol else _load_prices(benchmark_symbol))}
+        for benchmark_symbol, _ in benchmark_definitions
+    }
     start_index = next((index for index, row in enumerate(symbol_rows) if row.date >= requested_start), None)
     end_index = next((index for index in range(len(symbol_rows) - 1, -1, -1) if symbol_rows[index].date <= requested_end), None)
     if start_index is None or end_index is None or start_index > end_index:
@@ -66,9 +76,14 @@ def run_backtest(request: dict[str, Any]) -> dict[str, Any]:
         raise BacktestError(f"시작일은 워밍업 데이터를 위해 {earliest} 이후여야 합니다.", code="INSUFFICIENT_WARMUP", details={"earliest_start_date": earliest})
 
     effective_rows = symbol_rows[start_index : end_index + 1]
-    missing_benchmark = [row.date.isoformat() for row in effective_rows if row.date not in benchmark_rows]
-    if missing_benchmark:
-        raise BacktestError(f"같은 기간의 {benchmark_symbol} 비교 데이터가 일부 없습니다.", code="MISSING_BENCHMARK_DATA", details={"dates": missing_benchmark[:5]})
+    for benchmark_symbol, _ in benchmark_definitions:
+        missing_benchmark = [row.date.isoformat() for row in effective_rows if row.date not in benchmark_rows[benchmark_symbol]]
+        if missing_benchmark:
+            raise BacktestError(
+                f"같은 기간의 {benchmark_symbol} 비교 데이터가 일부 없습니다.",
+                code="MISSING_BENCHMARK_DATA",
+                details={"symbol": benchmark_symbol, "dates": missing_benchmark[:5]},
+            )
 
     previous_close = symbol_rows[start_index - 1].close
     first_limit = (previous_close * Decimal("1.20")).quantize(Decimal("0.01"))
@@ -101,7 +116,9 @@ def run_backtest(request: dict[str, Any]) -> dict[str, Any]:
     buy_count = 0
     sell_count = 0
     peak_equity = capital
-    qqq_start = benchmark_rows[effective_rows[0].date].close
+    benchmark_starts = {
+        benchmark_symbol: benchmark_rows[benchmark_symbol][effective_rows[0].date].close for benchmark_symbol, _ in benchmark_definitions
+    }
 
     for index, row in enumerate(effective_rows):
         absolute_index = start_index + index
@@ -136,7 +153,10 @@ def run_backtest(request: dict[str, Any]) -> dict[str, Any]:
         equity = state.cash + Decimal(state.quantity) * row.close
         peak_equity = max(peak_equity, equity)
         drawdown = equity / peak_equity - Decimal(1) if peak_equity else Decimal(0)
-        qqq_equity = capital * benchmark_rows[row.date].close / qqq_start
+        benchmark_equities = {
+            benchmark_symbol: capital * benchmark_rows[benchmark_symbol][row.date].close / benchmark_starts[benchmark_symbol]
+            for benchmark_symbol, _ in benchmark_definitions
+        }
         avg_cost = state.avg_cost if state.quantity else None
         current_star = star_price(profile, state) if state.quantity else None
         target = state.avg_cost * (Decimal(1) + profile.target_pct) if state.quantity else None
@@ -155,7 +175,7 @@ def run_backtest(request: dict[str, Any]) -> dict[str, Any]:
                 "cash": _number(state.cash),
                 "invested": _number(Decimal(state.quantity) * row.close),
                 "equity": _number(equity),
-                "qqq_equity": _number(qqq_equity),
+                "benchmark_equities": {benchmark_symbol: _number(value) for benchmark_symbol, value in benchmark_equities.items()},
                 "drawdown": _number(drawdown),
                 "cycle_id": state.cycle_id,
             }
@@ -163,7 +183,17 @@ def run_backtest(request: dict[str, Any]) -> dict[str, Any]:
 
     final_equity = Decimal(str(daily[-1]["equity"]))
     total_return = final_equity / capital - Decimal(1)
-    benchmark_return = Decimal(str(daily[-1]["qqq_equity"])) / capital - Decimal(1)
+    benchmark_results = []
+    for benchmark_symbol, role in benchmark_definitions:
+        benchmark_return = Decimal(str(daily[-1]["benchmark_equities"][benchmark_symbol])) / capital - Decimal(1)
+        benchmark_results.append(
+            {
+                "symbol": benchmark_symbol,
+                "role": role,
+                "return": _number(benchmark_return),
+                "excess_return": _number(total_return - benchmark_return),
+            }
+        )
     years = Decimal(len(daily)) / Decimal(252)
     cagr = Decimal(str(float(final_equity / capital) ** (1 / float(years)) - 1)) if years > 0 else Decimal(0)
     mdd = min(Decimal(str(row["drawdown"])) for row in daily)
@@ -172,8 +202,7 @@ def run_backtest(request: dict[str, Any]) -> dict[str, Any]:
         "cagr": _number(cagr),
         "mdd": _number(mdd),
         "final_equity": _number(final_equity),
-        "benchmark_return": _number(benchmark_return),
-        "excess_return": _number(total_return - benchmark_return),
+        "benchmarks": benchmark_results,
         "cycle_count": completed_cycles,
         "trading_days": len(daily),
         "buy_count": buy_count,
@@ -193,6 +222,7 @@ def run_backtest(request: dict[str, Any]) -> dict[str, Any]:
         "slippage": 0,
         "tax": 0,
         "warmup_sessions": WARMUP_SESSIONS,
+        "benchmarks": [{"symbol": benchmark_symbol, "role": role} for benchmark_symbol, role in benchmark_definitions],
         "requested_dates": {"start": requested_start.isoformat(), "end": requested_end.isoformat()},
         "effective_dates": {"start": effective_rows[0].date.isoformat(), "end": effective_rows[-1].date.isoformat()},
     }
@@ -203,6 +233,7 @@ def run_backtest(request: dict[str, Any]) -> dict[str, Any]:
         # Read-only compatibility for the distributed V1 dataset. New data
         # collection writes QQQ/SMH/SPY and uses regime-weather-1 above.
         weather_daily = _load_regime_weather(effective_rows[0].date, effective_rows[-1].date)
+    weather_research = _load_weather_research(symbol, effective_rows[-1].date)
     return {
         "request": normalized_request,
         "summary": summary,
@@ -210,6 +241,7 @@ def run_backtest(request: dict[str, Any]) -> dict[str, Any]:
         "daily": daily,
         "events": events,
         "weather_daily": weather_daily,
+        "weather_research": weather_research,
     }
 
 
@@ -283,17 +315,8 @@ def _load_regime_weather(start_date: date, end_date: date) -> list[dict[str, Any
 
 
 def _load_engine_weather(symbol: str, start_date: date, end_date: date) -> list[dict[str, Any]]:
-    required = (symbol, SIGNAL_SYMBOLS[symbol], BENCHMARK_SYMBOL)
-    if any(not (DATA_DIR / f"{item.lower()}_adjusted_daily.csv").exists() for item in required):
-        return []
-    series: dict[str, Any] = {}
-    for item in required:
-        path = DATA_DIR / f"{item.lower()}_adjusted_daily.csv"
-        with path.open(encoding="utf-8", newline="") as handle:
-            series[item] = candles_from_rows(csv.DictReader(handle))
-    try:
-        snapshots = compute_weather_history(symbol, series)
-    except WeatherDataError:
+    snapshots = _load_engine_weather_history(symbol)
+    if not snapshots:
         return []
     return [
         {
@@ -318,6 +341,59 @@ def _load_engine_weather(symbol: str, start_date: date, end_date: date) -> list[
         }
         for snapshot in snapshots
         if start_date <= snapshot.session_date <= end_date
+    ]
+
+
+def _load_engine_weather_history(symbol: str) -> list[WeatherSnapshot]:
+    required = (symbol, SIGNAL_SYMBOLS[symbol], BENCHMARK_SYMBOL)
+    if any(not (DATA_DIR / f"{item.lower()}_adjusted_daily.csv").exists() for item in required):
+        return []
+    series: dict[str, Any] = {}
+    for item in required:
+        path = DATA_DIR / f"{item.lower()}_adjusted_daily.csv"
+        with path.open(encoding="utf-8", newline="") as handle:
+            series[item] = candles_from_rows(csv.DictReader(handle))
+    try:
+        return compute_weather_history(symbol, series)
+    except WeatherDataError:
+        return []
+
+
+def _load_weather_research(symbol: str, end_date: date) -> list[dict[str, Any]]:
+    snapshots = _load_engine_weather_history(symbol)
+    prices = _load_prices(symbol)
+    price_index = {row.date: index for index, row in enumerate(prices)}
+    samples: dict[str, list[Decimal]] = {state: [] for state in WEATHER_STATES}
+    previous_state = ""
+
+    for snapshot in snapshots:
+        if snapshot.session_date > end_date:
+            break
+        if snapshot.weather_state == previous_state:
+            continue
+        previous_state = snapshot.weather_state
+        index = price_index.get(snapshot.session_date)
+        if index is None:
+            continue
+        target_index = index + WEATHER_RESEARCH_HORIZON
+        if target_index >= len(prices) or prices[target_index].date > end_date:
+            continue
+        forward_return = prices[target_index].close / prices[index].close - Decimal(1)
+        samples[snapshot.weather_state].append(forward_return)
+
+    return [
+        {
+            "symbol": symbol,
+            "weather_state": state,
+            "horizon_sessions": WEATHER_RESEARCH_HORIZON,
+            "sample_count": len(values),
+            "average_return": _number(sum(values, Decimal(0)) / Decimal(len(values))) if values else None,
+            "win_rate": _number(Decimal(sum(value > 0 for value in values)) / Decimal(len(values))) if values else None,
+            "worst_return": _number(min(values)) if values else None,
+            "through_date": end_date.isoformat(),
+        }
+        for state in WEATHER_STATES
+        for values in (samples[state],)
     ]
 
 

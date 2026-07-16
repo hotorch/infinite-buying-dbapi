@@ -27,8 +27,10 @@ def test_backtest_contract_is_complete_and_deterministic() -> None:
     assert first["daily"] and first["events"]
     assert first["weather_daily"]
     assert len(first["assumptions"]["digest"]) == 64
-    assert {"total_return", "cagr", "mdd", "final_equity", "benchmark_return", "excess_return", "cycle_count"} <= first["summary"].keys()
-    assert {"date", "open", "high", "low", "close", "avg_cost", "star_price", "target_price", "t", "quantity", "cash", "equity", "qqq_equity", "drawdown", "cycle_id"} <= first["daily"][0].keys()
+    assert {"total_return", "cagr", "mdd", "final_equity", "benchmarks", "cycle_count"} <= first["summary"].keys()
+    assert {item["symbol"] for item in first["summary"]["benchmarks"]} == {"TQQQ", "QQQ", "SPY"}
+    assert {"date", "open", "high", "low", "close", "avg_cost", "star_price", "target_price", "t", "quantity", "cash", "equity", "benchmark_equities", "drawdown", "cycle_id"} <= first["daily"][0].keys()
+    assert set(first["daily"][0]["benchmark_equities"]) == {"TQQQ", "QQQ", "SPY"}
     assert {"date", "side", "role", "quantity", "price", "fee", "reason_code", "cycle_id"} <= first["events"][0].keys()
     assert {
         "date",
@@ -41,6 +43,9 @@ def test_backtest_contract_is_complete_and_deterministic() -> None:
         "signal_rs",
         "signal_distance_50",
     } <= first["weather_daily"][0].keys()
+    assert first["weather_research"]
+    assert {row["symbol"] for row in first["weather_research"]} == {"TQQQ"}
+    assert {row["horizon_sessions"] for row in first["weather_research"]} == {60}
 
 
 @pytest.mark.parametrize(
@@ -77,3 +82,6 @@ def test_soxl_backtest_uses_smh_weather_engine() -> None:
     assert {row["signal_symbol"] for row in result["weather_daily"]} == {"SMH"}
     assert {row["benchmark_symbol"] for row in result["weather_daily"]} == {"SPY"}
     assert {row["ruleset_version"] for row in result["weather_daily"]} == {"regime-weather-1"}
+    assert {item["symbol"] for item in result["summary"]["benchmarks"]} == {"SOXL", "SMH", "SPY"}
+    assert set(result["daily"][0]["benchmark_equities"]) == {"SOXL", "SMH", "SPY"}
+    assert {row["symbol"] for row in result["weather_research"]} == {"SOXL"}

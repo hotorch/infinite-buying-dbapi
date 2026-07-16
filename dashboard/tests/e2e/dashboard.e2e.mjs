@@ -86,6 +86,9 @@ async function testDefaultBacktest() {
   assert.equal(result.body.daily.length, result.body.summary.trading_days);
   assert.ok(result.body.events.length > 0);
   assert.ok(result.body.weather_daily.length > 0);
+  assert.deepEqual(result.body.summary.benchmarks.map((item) => item.symbol), ["TQQQ", "QQQ", "SPY"]);
+  assert.deepEqual(Object.keys(result.body.daily[0].benchmark_equities), ["TQQQ", "QQQ", "SPY"]);
+  assert.ok(result.body.weather_research.every((item) => item.symbol === "TQQQ"));
   assert.equal(result.body.weather_daily.at(-1).date, "2026-07-10");
   assert.equal(result.body.weather_daily.at(-1).signal_date, "2026-07-09");
   assert.equal(result.body.weather_daily.at(-1).weather_state, "strong_green");
@@ -114,6 +117,9 @@ async function testSoxlBacktest() {
   assert.equal(result.body.weather_daily.at(-1).signal_symbol, "SMH");
   assert.equal(result.body.weather_daily.at(-1).benchmark_symbol, "SPY");
   assert.equal(result.body.weather_daily.at(-1).ruleset_version, "regime-weather-1");
+  assert.deepEqual(result.body.summary.benchmarks.map((item) => item.symbol), ["SOXL", "SMH", "SPY"]);
+  assert.deepEqual(Object.keys(result.body.daily[0].benchmark_equities), ["SOXL", "SMH", "SPY"]);
+  assert.ok(result.body.weather_research.every((item) => item.symbol === "SOXL"));
 }
 
 async function testDeterministicResult() {

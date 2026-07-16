@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_on": "2026-07-15",
+  "generated_on": "2026-07-16",
   "source": {
     "name": "Toss Securities Open API",
     "endpoint": "/api/v1/candles",
@@ -22,38 +22,38 @@
   "files": {
     "qqq_adjusted_daily.csv": {
       "symbol": "QQQ",
-      "rows": 6878,
+      "rows": 6879,
       "first_date": "1999-03-10",
-      "last_date": "2026-07-14",
-      "sha256": "0cca06e644482525b4622fce7a01f46101083525a79c20937ca87615a8e3014c"
+      "last_date": "2026-07-15",
+      "sha256": "e7de53f95e7e350681122bcd50114509ad82a0fd74dd8993984eb63308165de3"
     },
     "soxl_adjusted_daily.csv": {
       "symbol": "SOXL",
-      "rows": 4110,
+      "rows": 4111,
       "first_date": "2010-03-11",
-      "last_date": "2026-07-14",
-      "sha256": "38b696c84c918acdb553ab6011877dd50736f2cac7e89607cae2dbad80796c13"
+      "last_date": "2026-07-15",
+      "sha256": "653794d58ecce70f27d49c7e5ae7606dc4aa41d0112501b17684f210855d1a92"
     },
     "tqqq_adjusted_daily.csv": {
       "symbol": "TQQQ",
-      "rows": 4129,
+      "rows": 4130,
       "first_date": "2010-02-11",
-      "last_date": "2026-07-14",
-      "sha256": "af68be202c5f7e2d024096b6cfefe452858aa7d9d78e4ea00bde661bb3c97e5f"
+      "last_date": "2026-07-15",
+      "sha256": "6f7e010b215413efb7a0a2c9d9cebab414d1d6d5d731baab6f906663fb2bd331"
     },
     "smh_adjusted_daily.csv": {
       "symbol": "SMH",
-      "rows": 1654,
+      "rows": 1655,
       "first_date": "2019-12-11",
-      "last_date": "2026-07-14",
-      "sha256": "4bdc50e7275b576b067d846a22dba22179a78d1c052c08553ec70b3ba1bff879"
+      "last_date": "2026-07-15",
+      "sha256": "a7b738e850550f7d0775f841518fa6210d250d646698cbfb62999c953bdda59c"
     },
     "spy_adjusted_daily.csv": {
       "symbol": "SPY",
-      "rows": 2646,
+      "rows": 2647,
       "first_date": "2016-01-04",
-      "last_date": "2026-07-14",
-      "sha256": "a58a1f0b1c4d2b92b8c911aa30e8ed007909026492729454f981871e4909daaf"
+      "last_date": "2026-07-15",
+      "sha256": "5ea30153f449d539a099268b4ec5d81c46c4b4378d4a471ef847d640d330ab59"
     }
   },
   "notes": [
@@ -65,6 +65,6 @@
     "source": "DB Securities Open API",
     "endpoint": "/api/v1/quote/overseas-stock/chart/day",
     "adjusted_price_request": "InputOrgAdjPrc=1",
-    "latest_completed_session": "2026-07-14"
+    "latest_completed_session": "2026-07-15"
   }
 }

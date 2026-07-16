@@ -37,6 +37,7 @@ export function BacktestChart({ daily, events, visibleRoles, selectedDate, capit
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const selectRef = useRef(onSelectDate);
   const [tooltip, setTooltip] = useState<Tooltip>(null);
+  const benchmarkSymbols = Object.keys(daily[0]?.benchmark_equities ?? {});
   selectRef.current = onSelectDate;
 
   const cycleBoundaries = useMemo(() => daily.flatMap((day, index) => {
@@ -69,7 +70,17 @@ export function BacktestChart({ daily, events, visibleRoles, selectedDate, capit
     const star = chart.addSeries(LineSeries, { color: "#e28a27", lineWidth: 2, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false }, 0);
     const target = chart.addSeries(LineSeries, { color: "#8b5cf6", lineWidth: 1, lineStyle: LineStyle.Dotted, priceLineVisible: false, lastValueVisible: false }, 0);
     const equity = chart.addSeries(LineSeries, { color: "#0f766e", lineWidth: 3, title: "내 자산", priceLineVisible: false }, 1);
-    const benchmark = chart.addSeries(LineSeries, { color: "#94a3b8", lineWidth: 2, lineStyle: LineStyle.Dashed, title: "QQQ", priceLineVisible: false }, 1);
+    const benchmarkColors = ["#64748b", "#7c3aed", "#d97706"];
+    const benchmarks = benchmarkSymbols.map((symbol, index) => ({
+      symbol,
+      series: chart.addSeries(LineSeries, {
+        color: benchmarkColors[index % benchmarkColors.length],
+        lineWidth: 2,
+        lineStyle: LineStyle.Dashed,
+        title: symbol,
+        priceLineVisible: false,
+      }, 1),
+    }));
     const drawdown = chart.addSeries(AreaSeries, { lineColor: "#e05252", topColor: "rgba(224, 82, 82, 0.08)", bottomColor: "rgba(224, 82, 82, 0.34)", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, priceFormat: { type: "percent", precision: 1, minMove: 0.1 } }, 2);
 
     candles.setData(daily.map((day) => ({ time: day.date, open: day.open, high: day.high, low: day.low, close: day.close })));
@@ -77,7 +88,9 @@ export function BacktestChart({ daily, events, visibleRoles, selectedDate, capit
     star.setData(daily.map((day) => day.star_price == null ? ({ time: day.date }) : ({ time: day.date, value: day.star_price })));
     target.setData(daily.map((day) => day.target_price == null ? ({ time: day.date }) : ({ time: day.date, value: day.target_price })));
     equity.setData(daily.map((day) => ({ time: day.date, value: day.equity })));
-    benchmark.setData(daily.map((day) => ({ time: day.date, value: day.qqq_equity })));
+    for (const benchmark of benchmarks) {
+      benchmark.series.setData(daily.map((day) => ({ time: day.date, value: day.benchmark_equities[benchmark.symbol] })));
+    }
     drawdown.setData(daily.map((day) => ({ time: day.date, value: day.drawdown * 100 })));
 
     markersRef.current = createSeriesMarkers(candles, []);
@@ -168,7 +181,7 @@ export function BacktestChart({ daily, events, visibleRoles, selectedDate, capit
       >
         <div ref={containerRef} className="chartCanvas" />
         <div className="paneLabel priceLabel"><b>가격 · 체결</b><span>USD</span></div>
-        <div className="paneLabel assetLabel"><b>자산 · QQQ</b><span>USD</span></div>
+        <div className="paneLabel assetLabel"><b>자산 · {benchmarkSymbols.join(" · ")}</b><span>USD</span></div>
         <div className="paneLabel drawdownLabel"><b>낙폭</b><span>%</span></div>
         <div className="cycleLayer" aria-hidden="true">{cycleBoundaries.map((boundary) => <div className="cycleLine" data-cycle-date={boundary.date} key={boundary.date}><span>↻ {boundary.number}</span></div>)}</div>
         {tooltip && <ChartTooltip tooltip={tooltip} capital={capital} width={containerRef.current?.clientWidth ?? 1000} height={containerRef.current?.clientHeight ?? 700} />}
@@ -187,7 +200,7 @@ function ChartTooltip({ tooltip, capital, width, height }: { tooltip: NonNullabl
       <div className="tooltipDate"><b>{shortDate(day.date)}</b><span>{day.cycle_id.replace("cycle-", "사이클 ")}</span></div>
       <div className="tooltipGroup"><strong>가격</strong><p>시 {money.format(day.open)} · 고 {money.format(day.high)}</p><p>저 {money.format(day.low)} · 종 {money.format(day.close)}</p></div>
       <div className="tooltipGroup"><strong>내 상태</strong><p>평균 {day.avg_cost == null ? "-" : money.format(day.avg_cost)} · 별 {day.star_price == null ? "-" : money.format(day.star_price)}</p><p>T {number.format(day.t)} · {day.quantity}주 · 총 {money.format(day.equity)}</p></div>
-      <div className="tooltipGroup"><strong>비교</strong><p>전략 {percent(day.equity / capital - 1)} · QQQ {percent(day.qqq_equity / capital - 1)} · 낙폭 {percent(day.drawdown)}</p></div>
+      <div className="tooltipGroup"><strong>비교</strong><p>전략 {percent(day.equity / capital - 1)} · {Object.entries(day.benchmark_equities).map(([symbol, equity]) => `${symbol} ${percent(equity / capital - 1)}`).join(" · ")} · 낙폭 {percent(day.drawdown)}</p></div>
       <div className="tooltipGroup"><strong>오늘의 체결</strong><p>{events.length ? events.map((event) => `${ROLE_META[event.role].symbol} ${ROLE_META[event.role].label}`).join(" · ") : "체결 없음"}</p></div>
     </div>
   );

@@ -11,12 +11,20 @@ export type Summary = {
   cagr: number;
   mdd: number;
   final_equity: number;
-  benchmark_return: number;
-  excess_return: number;
+  benchmarks: BenchmarkResult[];
   cycle_count: number;
   trading_days: number;
   buy_count: number;
   sell_count: number;
+};
+
+export type BenchmarkRole = "same_asset" | "underlying" | "market";
+
+export type BenchmarkResult = {
+  symbol: "TQQQ" | "SOXL" | "QQQ" | "SMH" | "SPY";
+  role: BenchmarkRole;
+  return: number;
+  excess_return: number;
 };
 
 export type Assumptions = {
@@ -26,6 +34,7 @@ export type Assumptions = {
   slippage: number;
   tax: number;
   warmup_sessions: number;
+  benchmarks: Array<{ symbol: BenchmarkResult["symbol"]; role: BenchmarkRole }>;
   requested_dates: { start: string; end: string };
   effective_dates: { start: string; end: string };
   digest: string;
@@ -45,7 +54,7 @@ export type DailyRow = {
   cash: number;
   invested: number;
   equity: number;
-  qqq_equity: number;
+  benchmark_equities: Record<string, number>;
   drawdown: number;
   cycle_id: string;
 };
@@ -86,6 +95,17 @@ export type RegimeWeatherRow = {
   reasons: string[];
 };
 
+export type WeatherResearch = {
+  symbol: "TQQQ" | "SOXL";
+  weather_state: WeatherState;
+  horizon_sessions: number;
+  sample_count: number;
+  average_return: number | null;
+  win_rate: number | null;
+  worst_return: number | null;
+  through_date: string;
+};
+
 export type TradeRole =
   | "initial_buy"
   | "avg_half_buy"
@@ -104,6 +124,7 @@ export type BacktestResult = {
   daily: DailyRow[];
   events: TradeEvent[];
   weather_daily: RegimeWeatherRow[];
+  weather_research: WeatherResearch[];
 };
 
 export type ApiError = {

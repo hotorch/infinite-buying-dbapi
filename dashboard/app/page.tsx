@@ -103,6 +103,10 @@ export default function DashboardPage() {
     }
     return undefined;
   }, [result, selectedDay]);
+  const selectedResearch = useMemo(
+    () => result?.weather_research.find((item) => item.weather_state === selectedWeather?.weather_state),
+    [result, selectedWeather],
+  );
 
   const downloadJson = () => result && downloadBlob(JSON.stringify(result, null, 2), `${result.request.symbol.toLowerCase()}-backtest-${result.request.start_date}-${result.request.end_date}.json`, "application/json;charset=utf-8");
   const downloadCsv = () => {
@@ -129,12 +133,6 @@ export default function DashboardPage() {
         {result && !running && (
           <div className="results">
             <div className="assumptionStrip"><span><b>{result.request.symbol}</b></span><span>{result.assumptions.effective_dates.start} → {result.assumptions.effective_dates.end}</span><span>{result.request.division_count}분할</span><span>{money.format(result.request.capital)}</span><span>수수료 {(result.assumptions.fee_rate * 100).toFixed(2)}%</span><span>수정 OHLC</span></div>
-            <RegimeWeather
-              weather={selectedWeather}
-              symbol={result.request.symbol}
-              selectedDate={selectedDay?.date ?? ""}
-              latestAvailableDate={result.weather_daily.at(-1)?.date ?? ""}
-            />
             <ResultSummary summary={result.summary} />
 
             <section className="chartSection" aria-labelledby="chart-title">
@@ -143,6 +141,14 @@ export default function DashboardPage() {
               <ChartLegend visibleRoles={visibleRoles} onToggleRole={toggleRole} onShowAll={showAllRoles} onHideAll={hideAllRoles} />
               <BacktestChart daily={result.daily} events={result.events} visibleRoles={visibleRoles} selectedDate={selectedDay?.date ?? ""} capital={result.request.capital} onSelectDate={setSelectedDate} />
             </section>
+
+            <RegimeWeather
+              weather={selectedWeather}
+              research={selectedResearch}
+              symbol={result.request.symbol}
+              selectedDate={selectedDay?.date ?? ""}
+              latestAvailableDate={result.weather_daily.at(-1)?.date ?? ""}
+            />
 
             {selectedDay && <SelectedDateDetails day={selectedDay} events={selectedEvents} capital={result.request.capital} />}
             <TradeHistory events={result.events} selectedDate={selectedDay?.date ?? ""} onSelectDate={setSelectedDate} />
