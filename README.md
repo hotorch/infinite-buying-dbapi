@@ -26,7 +26,7 @@ DB증권 Open API를 이용해 `순수 무한매수 V4` 규칙을 계산하고, 
 | 실주문 | 강사 계좌 1주 인수시험 증거가 등록될 때까지 fail-closed |
 | Hermes 연동 | 저장소 안의 단일 진입 문서는 `docs/hermes-handoff.md`. 외부 연결은 실습에서 구성 |
 
-Python 3.12 검사는 Windows와 macOS에서, 대시보드 검사는 Windows에서 [GitHub Actions](https://github.com/hotorch/infinite-buying-dbapi/actions)로 실행됩니다.
+Python 3.12와 대시보드 검사는 Windows와 macOS에서 [GitHub Actions](https://github.com/hotorch/infinite-buying-dbapi/actions)로 실행됩니다.
 
 ## 1. 이 프로그램이 하는 일
 
@@ -74,6 +74,7 @@ Python 3.12 검사는 Windows와 macOS에서, 대시보드 검사는 Windows에�
 4. 계좌별 APP_KEY와 APP_SECRET
 5. Windows는 PowerShell, macOS는 Terminal
 6. Python 실행환경을 준비해 주는 `uv`
+7. 대시보드를 사용할 경우 Node.js와 `npm`
 
 ### 돈이 필요한 시점
 
@@ -124,7 +125,18 @@ uv sync --python 3.12
 uv run app --help
 ```
 
-명령 목록이 나오면 설치가 끝난 것입니다. 자세한 내용은 [설치 매뉴얼](docs/manuals/01-installation.md)을 참고하세요.
+명령 목록이 나오면 Python 설치가 끝난 것입니다. 대시보드를 사용할 컴퓨터에서는 저장소 루트에서 이어서 JavaScript 의존성을 설치하고 실행합니다.
+
+```powershell
+cd dashboard
+npm ci
+cd ..
+uv run app dashboard start
+```
+
+`npm ci`는 `dashboard/package-lock.json`에 고정된 버전을 그대로 설치합니다. 실행 후 [http://localhost:3000](http://localhost:3000)을 여세요. 백테스트용 Python은 Windows의 `.venv/Scripts/python.exe`, macOS의 `.venv/bin/python`을 자동으로 찾고, 가상환경이 없을 때만 각각 `python`, `python3` 명령을 사용합니다. `BACKTEST_PYTHON`은 특수한 설치 경로를 직접 지정해야 할 때만 쓰는 선택 옵션입니다.
+
+자세한 내용은 [설치 매뉴얼](docs/manuals/01-installation.md)을 참고하세요.
 
 ## 5. DB증권 키를 안전하게 등록하기
 
@@ -346,6 +358,7 @@ uv run app backup create backups/state-backup.sqlite3
 - `UNKNOWN`, `LOCKED`, `RECONCILIATION_REQUIRED`가 나오면 새 주문을 중단하고 DB증권 앱의 잔고·미체결 주문과 비교하세요.
 - SQLite 파일을 엑셀이나 DB 편집기로 직접 고치지 마세요.
 - 진단보고서는 `--redacted` 옵션을 유지한 상태로만 전달하세요.
+- 대시보드에 `Python 환경과 데이터 파일을 확인`하라는 오류가 나오면 저장소 루트에서 `uv sync --python 3.12`를 다시 확인하고, `dashboard` 폴더에서 `npm ci`가 성공했는지와 위 `.venv` Python 경로가 실제로 있는지 확인하세요. 일반 설치에서는 `BACKTEST_PYTHON`을 설정할 필요가 없습니다.
 
 자세한 오류별 해결책은 [문제 해결 매뉴얼](docs/manuals/06-troubleshooting.md)에 있습니다.
 

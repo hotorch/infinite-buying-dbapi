@@ -1,15 +1,14 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { resolvePythonExecutable } from "@/lib/python-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST() {
   const repositoryRoot = path.resolve(process.cwd(), "..");
-  const bundledPython = path.join(repositoryRoot, ".venv", "Scripts", "python.exe");
-  const python = process.env.BACKTEST_PYTHON || (existsSync(bundledPython) ? bundledPython : "python");
+  const python = resolvePythonExecutable({ repositoryRoot });
 
   try {
     const result = await runCollector(python, repositoryRoot);

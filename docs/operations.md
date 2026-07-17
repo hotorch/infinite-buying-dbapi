@@ -44,6 +44,8 @@ Hermes는 기본적으로 위 조회와 결과 설명만 수행한다. 날씨와
 
 `setup`, `profile create`, `weather update`, `emergency-stop on`, `backup create`, `diagnostics`, `dashboard start`도 로컬 상태·파일·프로세스를 변경하므로 사용자 요청 없이 실행하지 않는다.
 
+대시보드는 Python과 JavaScript 의존성을 설치한 뒤 저장소 루트에서 `uv run app dashboard start`로 실행한다. 백테스트 Python은 Windows `.venv/Scripts/python.exe`, macOS `.venv/bin/python`을 우선 자동 탐색하고 없으면 각각 `python`, `python3`을 사용한다. `BACKTEST_PYTHON`은 선택 override다. Python 환경 오류가 나오면 `uv sync --python 3.12`, `dashboard`의 `npm ci`, 해당 Python 경로를 확인한다.
+
 ## 3. ON과 자동 실행
 
 ON은 다음 조건을 모두 통과해야 한다.

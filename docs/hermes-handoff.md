@@ -254,6 +254,8 @@ uv sync --python 3.12
 uv run app --help
 ```
 
+사용자가 대시보드 실행을 정확히 지시했다면 JavaScript 의존성은 `dashboard` 폴더에서 `npm ci`로 설치하고, 실행은 저장소 루트에서 `uv run app dashboard start`로 한다. 백테스트 Python은 Windows `.venv/Scripts/python.exe`, macOS `.venv/bin/python`을 우선 자동 탐색하고 없으면 각각 `python`, `python3`을 사용한다. `BACKTEST_PYTHON`은 선택 override다. Python 환경 오류가 나오면 Python 의존성, `dashboard` 의존성, 실제 Python 경로를 확인한다.
+
 다음은 명시적 상태 변경 승인 없이 사용할 수 있는 조회 전용 명령이다. DB증권 조회는 계좌나 주문을 바꾸지 않지만 인증 토큰 발급·갱신과 네트워크 요청이 발생할 수 있다.
 
 ```powershell
