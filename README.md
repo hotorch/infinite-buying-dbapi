@@ -4,6 +4,12 @@ DB증권 Open API를 이용해 `순수 무한매수 V4` 규칙을 계산하고, 
 
 처음 사용하는 분은 이 README를 위에서부터 차례로 따라 하세요. 세부 설명은 [전체 매뉴얼 목차](docs/manuals/README.md)에 따로 정리되어 있습니다.
 
+## 프로젝트 소개 영상
+
+이 프로젝트를 처음 접한다면 아래 소개 영상을 먼저 확인하세요.
+
+[![순수 무한매수 V4 + DB증권 자동매매 프로젝트 소개 영상](https://img.youtube.com/vi/uZqWXTOO6CI/hqdefault.jpg)](https://youtu.be/uZqWXTOO6CI)
+
 > [!WARNING]
 > 이 프로그램은 투자 권유나 수익 보장 도구가 아닙니다. 레버리지 ETF는 큰 손실이 발생할 수 있습니다. `preview`로 계산을 확인하고 강사 실계좌 인수시험 증거가 등록되기 전에는 실주문이 자동으로 차단됩니다.
 
